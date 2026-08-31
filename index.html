@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es-UY">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <meta name="description" content="Carga rápida de gastos familiares">
+  <title>Gastos familiares</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al formulario</a>
+  <main id="main">
+    <header class="page-header">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 2v20M17 6.5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </div>
+      <div>
+        <p class="eyebrow">Caja familiar</p>
+        <h1>Registrar movimiento</h1>
+      </div>
+    </header>
+
+    <section class="card">
+      <form id="expense-form" novalidate>
+        <fieldset class="choice-group">
+          <legend>Tipo</legend>
+          <div class="segmented">
+            <label>
+              <input type="radio" name="type" value="Egreso" checked>
+              <span>Egreso</span>
+            </label>
+            <label>
+              <input type="radio" name="type" value="Ingreso">
+              <span>Ingreso</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="amount-row">
+          <label for="amount">Importe <small>obligatorio</small></label>
+          <div class="amount-input">
+            <span id="currency-symbol" aria-hidden="true">$</span>
+            <input id="amount" name="amount" type="number" min="0.01" max="100000000" step="0.01" inputmode="decimal" placeholder="0,00" autocomplete="off" required>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>Fecha <small>obligatorio</small></span>
+          <input id="date" name="date" type="date" min="2026-09-01" value="2026-09-01" required>
+        </label>
+
+        <label class="field">
+          <span>Categoría <small>obligatorio</small></span>
+          <select id="category" name="category" required></select>
+        </label>
+
+        <label class="field">
+          <span>Descripción <small>opcional</small></span>
+          <textarea id="description" name="description" rows="3" maxlength="300" placeholder="Ej. Supermercado del barrio"></textarea>
+        </label>
+
+        <p id="form-error" class="message error" role="alert" hidden></p>
+        <p id="form-success" class="message success" role="status" hidden></p>
+
+        <button id="submit-button" class="submit" type="submit">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>Guardar en la planilla</span>
+        </button>
+      </form>
+    </section>
+
+    <p class="footnote">
+      Se guarda directamente en la hoja de gastos familiares existente.
+    </p>
+  </main>
+  <script type="module" src="/app.js?v=5"></script>
+</body>
+</html>
