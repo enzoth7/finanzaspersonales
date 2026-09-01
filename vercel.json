@@ -2,6 +2,12 @@
   "functions": {
     "api/gastos.js": {
       "maxDuration": 10
+    },
+    "api/saldos.js": {
+      "maxDuration": 10
+    },
+    "api/oca.js": {
+      "maxDuration": 10
     }
   },
   "headers": [

@@ -3,6 +3,8 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import process from "node:process";
 import handler from "./api/gastos.js";
+import balancesHandler from "./api/saldos.js";
+import ocaHandler from "./api/oca.js";
 
 const root = process.cwd();
 const port = Number(process.env.PORT || 3002);
@@ -36,6 +38,7 @@ const mimeTypes = {
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
+  ".webp": "image/webp",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -84,6 +87,16 @@ const server = createServer(async (request, response) => {
       addVercelResponseHelpers(response);
       request.body = await readJsonBody(request);
       await handler(request, response);
+      return;
+    }
+    if (url.pathname === "/api/saldos") {
+      addVercelResponseHelpers(response);
+      await balancesHandler(request, response);
+      return;
+    }
+    if (url.pathname === "/api/oca") {
+      addVercelResponseHelpers(response);
+      await ocaHandler(request, response);
       return;
     }
     await serveStatic(decodeURIComponent(url.pathname), response);
