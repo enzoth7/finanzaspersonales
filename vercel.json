@@ -16,7 +16,8 @@
     }
   },
   "rewrites": [
-    {"source": "/enzo", "destination": "/enzo.html"}
+    {"source": "/enzo", "destination": "/enzo.html"},
+    {"source": "/carmen", "destination": "/carmen.html"}
   ],
   "headers": [
     {

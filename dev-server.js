@@ -61,7 +61,12 @@ async function readJsonBody(request) {
 }
 
 async function serveStatic(pathname, response) {
-  const requested = pathname === "/" ? "index.html" : pathname.slice(1);
+  const routeFiles = {
+    "/": "index.html",
+    "/enzo": "enzo.html",
+    "/carmen": "carmen.html"
+  };
+  const requested = routeFiles[pathname] || pathname.slice(1);
   const safePath = normalize(requested).replace(/^(\.\.[/\\])+/, "");
   const filePath = join(root, safePath);
 

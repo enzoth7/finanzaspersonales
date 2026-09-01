@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="es-UY">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Registro y dinero disponible de la caja familiar">
+  <title>Gastos familiares</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=7">
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+  <main id="main">
+    <header class="page-header">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 2v20M17 6.5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </div>
+      <div>
+        <h1 id="page-title">Registrar movimiento</h1>
+      </div>
+    </header>
+
+    <nav class="app-tabs" role="tablist" aria-label="Secciones de la aplicación">
+      <button id="register-tab" class="app-tab active" type="button" role="tab" aria-selected="true" aria-controls="register-panel" data-view="register">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span>Registrar</span>
+      </button>
+      <button id="balance-tab" class="app-tab" type="button" role="tab" aria-selected="false" aria-controls="balance-panel" data-view="balance">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7H4a2 2 0 0 1 0-4h13v4M4 7v12a2 2 0 0 0 2 2h14V7H4Z"/><path d="M16 14h.01"/></svg>
+        <span>Disponible</span>
+      </button>
+      <button id="oca-tab" class="app-tab" type="button" role="tab" aria-selected="false" aria-controls="oca-panel" data-view="oca">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></svg>
+        <span>OCA</span>
+      </button>
+    </nav>
+
+    <section id="register-panel" class="card view-panel" role="tabpanel" aria-labelledby="register-tab">
+      <form id="expense-form" novalidate>
+        <fieldset class="choice-group">
+          <legend>Tipo</legend>
+          <div class="segmented">
+            <label class="type-expense">
+              <input type="radio" name="type" value="Egreso" checked>
+              <span>Egreso</span>
+            </label>
+            <label class="type-income">
+              <input type="radio" name="type" value="Ingreso">
+              <span>Ingreso</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="amount-row">
+          <label for="amount">Importe <small>obligatorio</small></label>
+          <div class="amount-input">
+            <span id="currency-symbol" aria-hidden="true">$</span>
+            <input id="amount" name="amount" type="number" min="0.01" max="100000000" step="0.01" inputmode="decimal" placeholder="0,00" autocomplete="off" required>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>Fecha <small>hoy por defecto</small></span>
+          <input id="date" name="date" type="date" title="Se completa con la fecha de hoy, pero podés cambiarla" required>
+        </label>
+
+        <label class="field">
+          <span>Categoría <small>obligatorio</small></span>
+          <select id="category" name="category" required></select>
+        </label>
+
+        <label class="field">
+          <span>Descripción <small>opcional</small></span>
+          <textarea id="description" name="description" rows="3" maxlength="300" placeholder="Ej. Supermercado del barrio"></textarea>
+        </label>
+
+        <p id="form-error" class="message error" role="alert" hidden></p>
+        <p id="form-success" class="message success" role="status" hidden></p>
+
+        <button id="submit-button" class="submit" type="submit">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>Guardar en la planilla</span>
+        </button>
+      </form>
+    </section>
+
+    <section id="oca-panel" class="view-panel" role="tabpanel" aria-labelledby="oca-tab" hidden>
+      <div class="oca-summary-card">
+        <div class="oca-summary-heading">
+          <div>
+            <p class="oca-eyebrow">Saldo a pagar mes siguiente</p>
+            <p class="oca-summary-help">Total estimado de las cuotas</p>
+          </div>
+          <img src="/public/oca-blue.png" width="96" height="48" alt="OCA Blue" class="oca-brand-logo">
+        </div>
+        <strong id="oca-balance" class="oca-next-payment" aria-live="polite">$ —</strong>
+      </div>
+
+      <div class="oca-details-card">
+        <div class="section-heading">
+          <div>
+            <h2 id="oca-current-title">Detalle de cuotas</h2>
+            <p id="oca-current-total">Cuotas activas del mes actual.</p>
+          </div>
+          <button id="refresh-oca" class="refresh-button" type="button" aria-label="Actualizar estado de OCA">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
+          </button>
+        </div>
+
+        <div id="oca-loading" class="balance-loading" aria-hidden="true">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+        <div class="oca-table-wrap">
+          <table class="oca-data-table">
+            <thead>
+              <tr>
+                <th scope="col">Nombre</th>
+                <th scope="col">Cuota</th>
+                <th scope="col" class="numeric-column">Importe</th>
+              </tr>
+            </thead>
+            <tbody id="oca-purchase-list"></tbody>
+          </table>
+        </div>
+        <p id="oca-empty" class="oca-empty" hidden>No hay compras activas en el rango F18:J40.</p>
+        <p id="oca-error" class="message error" role="alert" hidden></p>
+        <p id="oca-updated" class="balance-updated" role="status"></p>
+      </div>
+
+      <div id="oca-forecast-card" class="oca-forecast-card" hidden>
+        <div class="forecast-heading">
+          <h2>Próximos 6 meses</h2>
+          <p>Cuánto pagarías si no agregás compras nuevas.</p>
+        </div>
+        <div class="oca-table-wrap forecast-table-wrap">
+          <table class="oca-data-table oca-forecast-table" aria-label="Proyección de pagos de OCA">
+            <thead>
+              <tr>
+                <th scope="col">Mes</th>
+                <th scope="col" class="numeric-column">Total a pagar</th>
+              </tr>
+            </thead>
+            <tbody id="oca-forecast"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <p class="balance-note">El próximo pago no incluye comisiones ni cargos que estén fuera de F18:J40.</p>
+    </section>
+
+    <section id="balance-panel" class="view-panel" role="tabpanel" aria-labelledby="balance-tab" hidden>
+      <div class="balance-card total-card">
+        <div class="balance-card-heading">
+          <div>
+            <p class="balance-label">Total disponible</p>
+            <p class="balance-help">Efectivo y tarjetas registradas</p>
+          </div>
+          <svg class="balance-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7H4a2 2 0 0 1 0-4h13v4M4 7v12a2 2 0 0 0 2 2h14V7H4Z"/><path d="M16 14h.01"/></svg>
+        </div>
+        <strong id="balance-total" class="balance-total" aria-live="polite">$ —</strong>
+      </div>
+
+      <div class="accounts-section">
+        <div class="section-heading">
+          <div>
+            <h2>Por cuenta</h2>
+            <p>Calculado directamente desde Google Sheets.</p>
+          </div>
+          <button id="refresh-balances" class="refresh-button" type="button" aria-label="Actualizar saldos">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
+          </button>
+        </div>
+
+        <div id="balance-loading" class="balance-loading" aria-hidden="true">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+        <div id="account-list" class="account-list"></div>
+        <p id="balance-error" class="message error" role="alert" hidden></p>
+        <p id="balance-updated" class="balance-updated" role="status"></p>
+      </div>
+
+      <p class="balance-note">Los movimientos sin cuenta se consideran Efectivo. Los cambios manuales en la planilla aparecen al actualizar.</p>
+    </section>
+
+    <p id="register-footnote" class="footnote">
+      Se guarda directamente en la hoja de gastos familiares existente.
+    </p>
+  </main>
+  <script type="module" src="/app.js?v=12"></script>
+</body>
+</html>

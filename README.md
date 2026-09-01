@@ -11,7 +11,8 @@ Destino:
 
 ## Componentes
 
-- index.html, styles.css y app.js: aplicación móvil con las pestañas Registrar, Disponible y OCA. El formulario mantiene tipo, importe, fecha, categoría y descripción opcional; la cuenta se asigna internamente como Efectivo y no aparece en pantalla.
+- index.html y welcome.css: selector inicial entre Enzo y Carmen.
+- carmen.html, styles.css y app.js: aplicación móvil familiar con las pestañas Registrar, Disponible y OCA. El formulario mantiene tipo, importe, fecha, categoría y descripción opcional; la cuenta se asigna internamente como Efectivo y no aparece en pantalla.
 - api/gastos.js: función de Vercel que valida y reenvía el movimiento.
 - api/saldos.js: función de solo lectura que solicita a Apps Script los saldos calculados desde la planilla.
 - api/oca.js: función de solo lectura que solicita el estado de las compras en cuotas de OCA.
@@ -20,7 +21,7 @@ Destino:
 
 ## Finanzas personales de Enzo
 
-La ruta `/enzo` mantiene el flujo personal separado de la carga familiar. Usa la planilla existente `2026-2028 FINANZAS` (`1rPs2YmiHSdpB_m4XDHEz1LFcH1LbWU4TRIWf0InjvKs`) y la pestaña `MOVIMIENTOS`:
+La portada `/` permite elegir entre `/enzo` y `/carmen`. La ruta `/enzo` mantiene el flujo personal separado de la carga familiar. Usa la planilla existente `2026-2028 FINANZAS` (`1rPs2YmiHSdpB_m4XDHEz1LFcH1LbWU4TRIWf0InjvKs`) y la pestaña `MOVIMIENTOS`:
 
 - `enzo.html`, `enzo.css` y `enzo.js`: importación móvil de lotes generados a partir de capturas y resumen por moneda.
 - `api/personal.js`: valida hasta 100 movimientos por lote y solicita su escritura o resumen a Apps Script.

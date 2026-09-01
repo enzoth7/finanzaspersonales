@@ -12,7 +12,7 @@ if (dirname(outputDirectory) !== projectRoot || basename(outputDirectory) !== "d
 await rm(outputDirectory, {recursive:true,force:true});
 await mkdir(outputDirectory, {recursive:true});
 
-for (const file of ["index.html", "styles.css", "app.js", "enzo.html", "enzo.css", "enzo.js"]) {
+for (const file of ["index.html", "welcome.css", "carmen.html", "styles.css", "app.js", "enzo.html", "enzo.css", "enzo.js"]) {
   await cp(join(projectRoot, file), join(outputDirectory, file));
 }
 
