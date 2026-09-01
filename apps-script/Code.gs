@@ -1,5 +1,5 @@
 const CONFIG = Object.freeze({
-  VERSION: "2026-09-01-v10",
+  VERSION: "2026-09-01-v11",
   SPREADSHEET_ID: "1QfWNrNWRQsFpWZNnYiItdRDop_d5Hw9CgoNC1s7wMxE",
   SHEET_GID: 1406094759,
   CONFIG_SHEET_GID: 900241103,
@@ -89,6 +89,9 @@ function appendPersonalMovements_(input) {
       }
 
       const date = Utilities.parseDate(movement.date, "America/Montevideo", "yyyy-MM-dd");
+      const firstInstallment = movement.firstInstallment
+        ? Utilities.parseDate(movement.firstInstallment, "America/Montevideo", "yyyy-MM-dd")
+        : "";
       rows.push([
         Utilities.getUuid(),
         date,
@@ -99,17 +102,23 @@ function appendPersonalMovements_(input) {
         movement.account,
         movement.description,
         fingerprint,
-        new Date()
+        new Date(),
+        movement.installments || "",
+        firstInstallment,
+        movement.installmentAmount || ""
       ]);
       existingFingerprints[fingerprint] = true;
     });
 
     if (rows.length) {
       const startRow = Math.max(sheet.getLastRow() + 1, 2);
-      sheet.getRange(startRow, 1, rows.length, 10).setValues(rows);
+      sheet.getRange(startRow, 1, rows.length, 13).setValues(rows);
       sheet.getRange(startRow, 2, rows.length, 1).setNumberFormat("dd/mm/yyyy");
       sheet.getRange(startRow, 5, rows.length, 1).setNumberFormat("0.00");
       sheet.getRange(startRow, 10, rows.length, 1).setNumberFormat("dd/mm/yyyy hh:mm");
+      sheet.getRange(startRow, 11, rows.length, 1).setNumberFormat("0");
+      sheet.getRange(startRow, 12, rows.length, 1).setNumberFormat("dd/mm/yyyy");
+      sheet.getRange(startRow, 13, rows.length, 1).setNumberFormat("0.00");
       SpreadsheetApp.flush();
     }
 
@@ -122,13 +131,14 @@ function appendPersonalMovements_(input) {
 function validatePersonalMovement_(input) {
   const allowedTypes = ["Ingreso", "Egreso"];
   const allowedCurrencies = ["Pesos", "Dolares", "Euros"];
-  const allowedAccounts = ["Efectivo", "BROU", "OCA Blue", "Prex", "N26", "Paypal", "Revolut", "Fiverr", "Grow", "Deuda Mamá", "Mercado Pago"];
+  const allowedAccounts = ["Efectivo", "BROU", "OCA Blue", "Prex", "N26", "Paypal", "Revolut", "Fiverr", "Grow", "Deuda Mamá", "Mercado Pago", "OCA Crédito"];
   const allowedCategories = [
     "Mama", "Ahorro", "Prestamo", "Freelancer", "Ventas", "Otros (Dev IVA, Amigos, etc)",
     "Saldo Inicial", "Cambio de moneda", "Ahorros", "Prestamos", "OCA", "Comida", "Transporte",
     "Celular", "Gimnasio", "Ropa", "Suscripciones", "Educacion y eventos", "Viajes",
     "Entretenimietno y salidas", "Salud y estetica", "Compras", "Otros asuntos",
-    "Comisiones bancarias", "Capex", "Ciudadania italiana", "Inversiones", "Pago Deuda Mamá"
+    "Comisiones bancarias", "Capex", "Ciudadania italiana", "Inversiones", "Pago Deuda Mamá",
+    "Compras a crédito"
   ];
   const movement = {
     date:cleanText_(input && input.date, 10),
@@ -138,6 +148,9 @@ function validatePersonalMovement_(input) {
     category:cleanText_(input && input.category, 80),
     account:cleanText_(input && input.account, 80),
     description:cleanText_(input && input.description, 300),
+    installments:Number(input && input.installments) || 0,
+    firstInstallment:cleanText_(input && input.firstInstallment, 10),
+    installmentAmount:Number(input && input.installmentAmount) || 0,
     allowDuplicate:Boolean(input && input.allowDuplicate)
   };
 
@@ -147,6 +160,16 @@ function validatePersonalMovement_(input) {
   if (!isFinite(movement.amount) || movement.amount <= 0 || movement.amount > 100000000) throw new Error("Importe personal inválido.");
   if (allowedCategories.indexOf(movement.category) === -1) throw new Error("Categoría personal inválida: " + movement.category);
   if (allowedAccounts.indexOf(movement.account) === -1) throw new Error("Cuenta personal inválida: " + movement.account);
+  if (movement.category === "Compras a crédito") {
+    if (movement.type !== "Egreso" || movement.account !== "OCA Crédito") throw new Error("La compra a crédito debe registrarse como egreso de OCA Crédito.");
+    if (!Number.isInteger(movement.installments) || movement.installments < 1 || movement.installments > 36) throw new Error("Cuotas inválidas.");
+    parseDateParts_(movement.firstInstallment);
+    movement.installmentAmount = roundMoney_(movement.amount / movement.installments);
+  } else {
+    movement.installments = 0;
+    movement.firstInstallment = "";
+    movement.installmentAmount = 0;
+  }
   return movement;
 }
 
@@ -158,7 +181,10 @@ function personalFingerprint_(movement) {
     movement.amount.toFixed(2),
     normalizeText_(movement.category),
     normalizeText_(movement.account),
-    normalizeText_(movement.description)
+    normalizeText_(movement.description),
+    movement.installments || 0,
+    movement.firstInstallment || "",
+    Number(movement.installmentAmount || 0).toFixed(2)
   ].join("|");
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, canonical)
     .map(function(byte) { return (byte + 256).toString(16).slice(-2); })
@@ -168,16 +194,24 @@ function personalFingerprint_(movement) {
 function getPersonalSummary_() {
   const sheet = getPersonalSheet_();
   const lastRow = sheet.getLastRow();
-  const rows = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, 10).getValues() : [];
+  const rows = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, 13).getValues() : [];
   const summary = summarizePersonalRows_(rows);
   summary.updatedAt = new Date().toISOString();
   return summary;
 }
 
-function summarizePersonalRows_(rows) {
+function summarizePersonalRows_(rows, today) {
   const currencies = {};
   const accounts = {};
   const recent = [];
+  const currentMonth = personalMonthStartText_(sheetDateText_(today || new Date()), 0);
+  const oca = {
+    currency:"Pesos",
+    outstanding:0,
+    months:[1, 2, 3, 4, 5, 6].map(function(offset) {
+      return {month:personalMonthStartText_(currentMonth, offset),amount:0};
+    })
+  };
 
   ["Pesos", "Dolares", "Euros"].forEach(function(currency) {
     currencies[currency] = {available:0,debt:0,net:0};
@@ -192,7 +226,22 @@ function summarizePersonalRows_(rows) {
     const account = cleanText_(row[6], 80);
     if (!date || ["Ingreso", "Egreso"].indexOf(type) === -1 || !currencies[currency] || !isFinite(amount) || amount <= 0) return;
 
-    if (account === "Deuda Mamá") {
+    const installments = Number(row[10]) || 0;
+    const firstInstallment = sheetDateText_(row[11]);
+    const installmentAmount = Number(row[12]) || (installments > 0 ? amount / installments : 0);
+    const isCreditPurchase = category === "Compras a crédito" && account === "OCA Crédito";
+
+    if (isCreditPurchase) {
+      if (currency === "Pesos" && installments > 0 && firstInstallment && isFinite(installmentAmount)) {
+        const elapsed = personalMonthDifference_(firstInstallment, currentMonth);
+        const remaining = elapsed < 0 ? installments : Math.max(0, installments - elapsed);
+        oca.outstanding += remaining * installmentAmount;
+        oca.months.forEach(function(item) {
+          const index = personalMonthDifference_(firstInstallment, item.month);
+          if (index >= 0 && index < installments) item.amount += installmentAmount;
+        });
+      }
+    } else if (account === "Deuda Mamá") {
       currencies[currency].debt += type === "Egreso" ? amount : -amount;
     } else {
       const key = currency + "|" + account;
@@ -206,7 +255,8 @@ function summarizePersonalRows_(rows) {
 
     recent.push({
       id:cleanText_(row[0], 80),date:date,type:type,currency:currency,amount:amount,
-      category:category,account:account,description:cleanText_(row[7], 300)
+      category:category,account:account,description:cleanText_(row[7], 300),
+      installments:installments,firstInstallment:firstInstallment,installmentAmount:roundMoney_(installmentAmount)
     });
   });
 
@@ -222,12 +272,28 @@ function summarizePersonalRows_(rows) {
     return a.currency.localeCompare(b.currency) || a.account.localeCompare(b.account);
   });
 
+  oca.outstanding = roundMoney_(oca.outstanding);
+  oca.months.forEach(function(item) { item.amount = roundMoney_(item.amount); });
+
   return {
     currencies:currencies,
     accounts:accountList,
+    oca:oca,
     recent:recent.slice(-10).reverse(),
     movements:recent.length
   };
+}
+
+function personalMonthStartText_(dateText, offset) {
+  const parts = parseDateParts_(dateText);
+  const date = new Date(Date.UTC(parts.year, parts.month - 1 + Number(offset || 0), 1));
+  return date.getUTCFullYear() + "-" + String(date.getUTCMonth() + 1).padStart(2, "0") + "-01";
+}
+
+function personalMonthDifference_(fromText, toText) {
+  const from = parseDateParts_(fromText);
+  const to = parseDateParts_(toText);
+  return (to.year - from.year) * 12 + to.month - from.month;
 }
 
 function roundMoney_(value) {

@@ -28,8 +28,37 @@ test("interpreta el JSON de Gemini y normaliza nombres", () => {
     category:"Entretenimietno y salidas",
     account:"Grow",
     description:"Café",
+    installments:0,
+    firstInstallment:"",
+    installmentAmount:0,
     allowDuplicate:false
   }]);
+});
+
+test("calcula una compra OCA y la primera cuota automáticamente", () => {
+  const movement = validatePersonalMovement({
+    fecha:"2026-09-01",
+    tipo:"Egreso",
+    moneda:"Pesos",
+    importe:1200,
+    categoria:"Compras a credito",
+    cuenta:"OCA Credito",
+    descripcion:"Notebook",
+    cuotas:3
+  });
+  assert.deepEqual(movement, {
+    date:"2026-09-01",
+    type:"Egreso",
+    currency:"Pesos",
+    amount:1200,
+    category:"Compras a crédito",
+    account:"OCA Crédito",
+    description:"Notebook",
+    installments:3,
+    firstInstallment:"2026-10-01",
+    installmentAmount:400,
+    allowDuplicate:false
+  });
 });
 
 test("marca una compra pagada por mamá como deuda", () => {
@@ -101,12 +130,20 @@ test("calcula disponible y deuda con mamá sin sumar monedas", () => {
     ["3","2026-09-01","Egreso","Pesos",3000,"Compras","Deuda Mamá","Compra con tarjeta de mamá","",new Date()],
     ["4","2026-09-01","Egreso","Pesos",1000,"Pago Deuda Mamá","Efectivo","Devolución","",new Date()],
     ["5","2026-09-01","Ingreso","Dolares",200,"Freelancer","Paypal","Trabajo","",new Date()],
-    ["6","2026-09-01","Egreso","Dolares",50,"Comida","Revolut","Cena","",new Date()]
-  ]);
+    ["6","2026-09-01","Egreso","Dolares",50,"Comida","Revolut","Cena","",new Date()],
+    ["7","2026-09-01","Egreso","Pesos",1200,"Compras a crédito","OCA Crédito","Notebook","",new Date(),3,"2026-10-01",400]
+  ], "2026-09-15");
   assert.deepEqual(JSON.parse(JSON.stringify(result.currencies)), {
     Pesos:{available:7000,debt:2000,net:5000},
     Dolares:{available:150,debt:0,net:150},
     Euros:{available:0,debt:0,net:0}
   });
-  assert.equal(result.movements, 6);
+  assert.equal(result.movements, 7);
+  assert.equal(result.oca.outstanding, 1200);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.oca.months.slice(0, 4))), [
+    {month:"2026-10-01",amount:400},
+    {month:"2026-11-01",amount:400},
+    {month:"2026-12-01",amount:400},
+    {month:"2027-01-01",amount:0}
+  ]);
 });

@@ -67,7 +67,7 @@ Todo este paso debe hacerse con enzothome1@gmail.com.
    - Acceso: cualquiera.
 7. Copiar la URL terminada en /exec.
 
-Al abrir esa URL en el navegador debe aparecer una respuesta JSON con `"ok":true`, el ID de esta planilla y la versión `2026-08-31-v9`.
+Al abrir esa URL en el navegador debe aparecer una respuesta JSON con `"ok":true`, el ID de esta planilla y la versión `2026-09-01-v11`.
 
 Después de cambiar `Code.gs`, guardar el proyecto y crear una nueva versión de la implementación web. El lector horario de Gmail usa el código guardado, pero la web necesita que la URL `/exec` apunte a la nueva implementación para disponer también de la lectura de saldos.
 
@@ -101,3 +101,9 @@ El lector es determinista: extrae fecha e importe con expresiones regulares y to
 - DRY_RUN: eliminar o establecer en false para producción.
 
 Después se puede importar esta carpeta en Vercel sin cambiar la planilla.
+
+## Control rápido personal y compras OCA
+
+La ruta `/enzo` permite importar movimientos, revisar el estado por moneda y registrar compras OCA. En `Crédito` solo se indica la fecha, qué se compró, el total y la cantidad de cuotas. La aplicación guarda internamente la categoría `Compras a crédito`, la cuenta `OCA Crédito`, la primera cuota del mes siguiente y el importe dividido.
+
+La pestaña `DASHBOARD` de la planilla personal contiene desde la fila 68 un control rápido con gasto del mes, disponible, principales rubros y la proyección de OCA de los próximos seis meses. Las compras a crédito cuentan como gasto del mes, pero no reducen el efectivo disponible hasta que se registra el pago real de OCA.

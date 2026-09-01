@@ -45,7 +45,9 @@ export default async function handler(request, response) {
             Dolares:{available:0,debt:0,net:0},
             Euros:{available:0,debt:0,net:0}
           },
-          accounts:[],recent:[],movements:0,updatedAt:new Date().toISOString(),dryRun:true
+          accounts:[],
+          oca:{currency:"Pesos",outstanding:0,months:[]},
+          recent:[],movements:0,updatedAt:new Date().toISOString(),dryRun:true
         });
       }
       const result = await callAppsScript({action:"personalSummary"});
@@ -53,6 +55,7 @@ export default async function handler(request, response) {
         ok:true,
         currencies:result.currencies || {},
         accounts:Array.isArray(result.accounts) ? result.accounts : [],
+        oca:result.oca || {currency:"Pesos",outstanding:0,months:[]},
         recent:Array.isArray(result.recent) ? result.recent : [],
         movements:Number(result.movements) || 0,
         updatedAt:result.updatedAt || null

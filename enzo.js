@@ -5,12 +5,13 @@ import {
   PERSONAL_TYPES,
   parsePersonalImport,
   validatePersonalMovement
-} from "./lib/personal.js?v=1";
+} from "./lib/personal.js?v=2";
 
 const title = document.querySelector("#personal-title");
 const tabs = Array.from(document.querySelectorAll(".personal-tabs .app-tab"));
 const importPanel = document.querySelector("#import-panel");
 const summaryPanel = document.querySelector("#personal-summary-panel");
+const creditPanel = document.querySelector("#credit-panel");
 const importText = document.querySelector("#import-text");
 const analyzeButton = document.querySelector("#analyze-import");
 const parseError = document.querySelector("#parse-error");
@@ -29,6 +30,19 @@ const recentCard = document.querySelector("#recent-card");
 const recentList = document.querySelector("#recent-list");
 const personalError = document.querySelector("#personal-error");
 const personalUpdated = document.querySelector("#personal-updated");
+const personalOcaCard = document.querySelector("#personal-oca-card");
+const personalOcaOutstanding = document.querySelector("#personal-oca-outstanding");
+const personalOcaMonths = document.querySelector("#personal-oca-months");
+const creditForm = document.querySelector("#credit-form");
+const creditDate = document.querySelector("#credit-date");
+const creditDescription = document.querySelector("#credit-description");
+const creditTotal = document.querySelector("#credit-total");
+const creditInstallments = document.querySelector("#credit-installments");
+const creditInstallmentValue = document.querySelector("#credit-installment-value");
+const creditFirstMonth = document.querySelector("#credit-first-month");
+const creditError = document.querySelector("#credit-error");
+const creditSuccess = document.querySelector("#credit-success");
+const saveCredit = document.querySelector("#save-credit");
 
 let reviewMovements = [];
 let summaryRequest = null;
@@ -106,6 +120,12 @@ function createMovementCard(movement, index) {
     createField("Cuenta", "account", movement, index, {values:PERSONAL_ACCOUNTS,wide:true}),
     createField("Descripción", "description", movement, index, {wide:true})
   );
+  if (movement.category === "Compras a crédito" || movement.account === "OCA Crédito") {
+    grid.append(
+      createField("Cuotas", "installments", movement, index, {type:"number",inputMode:"numeric",step:"1"}),
+      createField("Primera cuota", "firstInstallment", movement, index, {type:"date"})
+    );
+  }
 
   if (movement.duplicate) {
     const duplicate = document.createElement("label");
@@ -136,7 +156,7 @@ function updateMovementFromInput(input) {
   const index = Number(input.dataset.index);
   const field = input.dataset.field;
   if (!Number.isInteger(index) || !reviewMovements[index] || !field) return;
-  reviewMovements[index][field] = field === "amount" ? Number(input.value) : field === "allowDuplicate" ? input.checked : input.value;
+  reviewMovements[index][field] = ["amount", "installments"].includes(field) ? Number(input.value) : field === "allowDuplicate" ? input.checked : input.value;
   input.classList.remove("invalid");
 }
 
@@ -252,6 +272,27 @@ function formatMoney(value, currency) {
   }).format(Number(value) || 0);
 }
 
+function todayInMontevideo() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone:"America/Montevideo", year:"numeric", month:"2-digit", day:"2-digit"
+  }).formatToParts(new Date());
+  const get = (type) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function firstInstallmentDate(dateText) {
+  const match = String(dateText || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return "";
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]), 1)).toISOString().slice(0, 10);
+}
+
+function formatMonth(dateText) {
+  const date = new Date(`${dateText}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return "—";
+  const label = new Intl.DateTimeFormat("es-UY", {timeZone:"UTC",month:"long",year:"numeric"}).format(date);
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 function createCurrencyCard(currency, values) {
   const card = document.createElement("article");
   card.className = "currency-card";
@@ -314,12 +355,28 @@ function renderRecent(items) {
     name.textContent = item.description || item.category;
     const meta = document.createElement("div");
     meta.className = "recent-meta";
-    meta.textContent = `${item.date.split("-").reverse().join("/")} · ${item.account} · ${item.category}`;
+    const installmentText = item.installments ? ` · ${item.installments} cuotas` : "";
+    meta.textContent = `${item.date.split("-").reverse().join("/")} · ${item.account} · ${item.category}${installmentText}`;
     copy.append(name, meta);
     const amount = document.createElement("strong");
     amount.className = "recent-amount";
     amount.textContent = `${item.type === "Ingreso" ? "+" : "−"}${formatMoney(item.amount, item.currency)}`;
     row.append(copy, amount);
+    return row;
+  }));
+}
+
+function renderPersonalOca(oca = {}) {
+  personalOcaOutstanding.textContent = formatMoney(oca.outstanding, oca.currency || "Pesos");
+  const months = Array.isArray(oca.months) ? oca.months : [];
+  personalOcaMonths.replaceChildren(...months.map((item) => {
+    const row = document.createElement("div");
+    row.className = "personal-oca-row";
+    const month = document.createElement("span");
+    month.textContent = formatMonth(item.month);
+    const amount = document.createElement("strong");
+    amount.textContent = formatMoney(item.amount, oca.currency || "Pesos");
+    row.append(month, amount);
     return row;
   }));
 }
@@ -339,6 +396,7 @@ async function loadPersonalSummary() {
   personalError.hidden = true;
   personalLoading.hidden = false;
   currencySummary.hidden = true;
+  personalOcaCard.hidden = true;
   personalAccountsCard.hidden = true;
   recentCard.hidden = true;
   refreshPersonal.disabled = true;
@@ -351,8 +409,10 @@ async function loadPersonalSummary() {
       const currencies = result.currencies || {};
       currencySummary.replaceChildren(...PERSONAL_CURRENCIES.map((currency) => createCurrencyCard(currency, currencies[currency] || {available:0,debt:0,net:0})));
       renderPersonalAccounts(Array.isArray(result.accounts) ? result.accounts : []);
+      renderPersonalOca(result.oca || {});
       renderRecent(Array.isArray(result.recent) ? result.recent : []);
       currencySummary.hidden = false;
+      personalOcaCard.hidden = false;
       personalAccountsCard.hidden = false;
       recentCard.hidden = false;
       personalUpdated.textContent = formatUpdatedAt(result.updatedAt);
@@ -369,18 +429,74 @@ async function loadPersonalSummary() {
   return summaryRequest;
 }
 
+function updateCreditPreview() {
+  const total = Number(creditTotal.value);
+  const installments = Number(creditInstallments.value);
+  creditInstallmentValue.textContent = formatMoney(total > 0 && installments > 0 ? total / installments : 0, "Pesos");
+  creditFirstMonth.textContent = formatMonth(firstInstallmentDate(creditDate.value));
+}
+
+creditDate.value = todayInMontevideo();
+creditDate.addEventListener("input", updateCreditPreview);
+creditTotal.addEventListener("input", updateCreditPreview);
+creditInstallments.addEventListener("input", updateCreditPreview);
+updateCreditPreview();
+
+creditForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  creditError.hidden = true;
+  creditSuccess.hidden = true;
+  try {
+    const movement = validatePersonalMovement({
+      date:creditDate.value,
+      type:"Egreso",
+      currency:"Pesos",
+      amount:creditTotal.value,
+      category:"Compras a crédito",
+      account:"OCA Crédito",
+      description:creditDescription.value,
+      installments:creditInstallments.value,
+      firstInstallment:firstInstallmentDate(creditDate.value)
+    });
+    if (!movement.description) throw new Error("Indicá qué compraste.");
+    saveCredit.disabled = true;
+    saveCredit.querySelector("span").textContent = "Guardando…";
+    const response = await fetch("/api/personal", {
+      method:"POST",
+      headers:{"Content-Type":"application/json","Accept":"application/json"},
+      body:JSON.stringify({movements:[movement]})
+    });
+    const result = await readApiResult(response);
+    if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo guardar la compra.");
+    if (result.duplicates?.length) throw new Error("Esta compra parece ya registrada. Revisá MOVIMIENTOS antes de repetirla.");
+    creditSuccess.textContent = `Compra guardada en ${movement.installments} cuotas de ${formatMoney(movement.installmentAmount, "Pesos")}.`;
+    creditSuccess.hidden = false;
+    creditDescription.value = "";
+    creditTotal.value = "";
+    creditInstallments.value = "";
+    creditDate.value = todayInMontevideo();
+    updateCreditPreview();
+    summaryRequest = null;
+  } catch (error) {
+    creditError.textContent = error instanceof Error ? error.message : "No se pudo guardar la compra.";
+    creditError.hidden = false;
+  } finally {
+    saveCredit.disabled = false;
+    saveCredit.querySelector("span").textContent = "Guardar compra en cuotas";
+  }
+});
+
 function activateView(view) {
-  const summary = view === "summary";
-  importPanel.hidden = summary;
-  summaryPanel.hidden = !summary;
-  title.textContent = summary ? "Mi estado financiero" : "Importar gastos";
+  const views = {import:importPanel,summary:summaryPanel,credit:creditPanel};
+  Object.entries(views).forEach(([name, panel]) => { panel.hidden = name !== view; });
+  title.textContent = view === "summary" ? "Mi estado financiero" : view === "credit" ? "Compra en cuotas" : "Importar gastos";
   tabs.forEach((tab) => {
     const active = tab.dataset.view === view;
     tab.classList.toggle("active", active);
     tab.setAttribute("aria-selected", String(active));
     tab.tabIndex = active ? 0 : -1;
   });
-  if (summary) loadPersonalSummary();
+  if (view === "summary") loadPersonalSummary();
 }
 
 tabs.forEach((tab) => tab.addEventListener("click", () => activateView(tab.dataset.view)));

@@ -35,11 +35,13 @@ Campos obligatorios de cada objeto:
 
 Cuentas permitidas:
 
-`Efectivo`, `BROU`, `OCA Blue`, `Prex`, `N26`, `Paypal`, `Revolut`, `Fiverr`, `Grow`, `Deuda Mamá`, `Mercado Pago`.
+`Efectivo`, `BROU`, `OCA Blue`, `Prex`, `N26`, `Paypal`, `Revolut`, `Fiverr`, `Grow`, `Deuda Mamá`, `Mercado Pago`, `OCA Crédito`.
 
 Categorías permitidas:
 
-`Mama`, `Ahorro`, `Prestamo`, `Freelancer`, `Ventas`, `Otros (Dev IVA, Amigos, etc)`, `Saldo Inicial`, `Cambio de moneda`, `Ahorros`, `Prestamos`, `OCA`, `Comida`, `Transporte`, `Celular`, `Gimnasio`, `Ropa`, `Suscripciones`, `Educacion y eventos`, `Viajes`, `Entretenimietno y salidas`, `Salud y estetica`, `Compras`, `Otros asuntos`, `Comisiones bancarias`, `Capex`, `Ciudadania italiana`, `Inversiones`, `Pago Deuda Mamá`.
+`Mama`, `Ahorro`, `Prestamo`, `Freelancer`, `Ventas`, `Otros (Dev IVA, Amigos, etc)`, `Saldo Inicial`, `Cambio de moneda`, `Ahorros`, `Prestamos`, `OCA`, `Comida`, `Transporte`, `Celular`, `Gimnasio`, `Ropa`, `Suscripciones`, `Educacion y eventos`, `Viajes`, `Entretenimietno y salidas`, `Salud y estetica`, `Compras`, `Otros asuntos`, `Comisiones bancarias`, `Capex`, `Ciudadania italiana`, `Inversiones`, `Pago Deuda Mamá`, `Compras a crédito`.
+
+Las compras OCA se registran normalmente desde la pestaña `Crédito` de la aplicación. Si excepcionalmente devolvés una desde una captura, usa categoría `Compras a crédito`, cuenta `OCA Crédito` y agrega `cuotas` y `primera_cuota` (`AAAA-MM-DD`).
 
 Para elegir categoría, usa el concepto visible y el contexto que yo dé. Si no hay información suficiente para elegir una categoría, deja `categoria` vacía para que la aplicación me obligue a revisarla.
 

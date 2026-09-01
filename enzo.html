@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=8">
-  <link rel="stylesheet" href="/enzo.css?v=1">
+  <link rel="stylesheet" href="/enzo.css?v=2">
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -33,6 +33,10 @@
       <button id="personal-summary-tab" class="app-tab" type="button" role="tab" aria-selected="false" aria-controls="personal-summary-panel" data-view="summary">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7H4a2 2 0 0 1 0-4h13v4M4 7v12a2 2 0 0 0 2 2h14V7H4Z"/><path d="M16 14h.01"/></svg>
         <span>Mi estado</span>
+      </button>
+      <button id="credit-tab" class="app-tab" type="button" role="tab" aria-selected="false" aria-controls="credit-panel" data-view="credit">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v11H3zM3 10h18M7 15h3"/></svg>
+        <span>Crédito</span>
       </button>
     </nav>
 
@@ -83,6 +87,58 @@
       <p id="save-success" class="message success" role="status" hidden></p>
     </section>
 
+    <section id="credit-panel" class="view-panel" role="tabpanel" aria-labelledby="credit-tab" hidden>
+      <div class="credit-heading">
+        <div class="credit-heading-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7h18v11H3zM3 10h18M7 15h3"/></svg>
+        </div>
+        <div>
+          <h2>Compra con OCA</h2>
+          <p>Registrá el total y la aplicación calcula el valor de cada cuota.</p>
+        </div>
+      </div>
+
+      <form id="credit-form" class="credit-form" novalidate>
+        <label class="credit-field" for="credit-date">
+          <span>Fecha de compra</span>
+          <input id="credit-date" type="date" required>
+        </label>
+        <label class="credit-field" for="credit-description">
+          <span>¿Qué compraste?</span>
+          <input id="credit-description" type="text" maxlength="300" autocomplete="off" placeholder="Ej. Notebook" required>
+        </label>
+        <div class="credit-grid">
+          <label class="credit-field" for="credit-total">
+            <span>Valor total</span>
+            <input id="credit-total" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0" required>
+          </label>
+          <label class="credit-field" for="credit-installments">
+            <span>Cantidad de cuotas</span>
+            <input id="credit-installments" type="number" inputmode="numeric" min="1" max="36" step="1" placeholder="1" required>
+          </label>
+        </div>
+
+        <div class="credit-preview" aria-live="polite">
+          <div>
+            <span>Valor de cada cuota</span>
+            <strong id="credit-installment-value">$ 0</strong>
+          </div>
+          <div>
+            <span>Primera cuota</span>
+            <strong id="credit-first-month">—</strong>
+          </div>
+        </div>
+
+        <p class="credit-note">Se guardará internamente como “Compras a crédito” en “OCA Crédito”. No reduce tu efectivo hoy.</p>
+        <p id="credit-error" class="message error" role="alert" hidden></p>
+        <p id="credit-success" class="message success" role="status" hidden></p>
+        <button id="save-credit" class="submit" type="submit">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>Guardar compra en cuotas</span>
+        </button>
+      </form>
+    </section>
+
     <section id="personal-summary-panel" class="view-panel" role="tabpanel" aria-labelledby="personal-summary-tab" hidden>
       <div class="personal-summary-heading">
         <div>
@@ -98,6 +154,17 @@
         <div class="skeleton-row"></div>
       </div>
       <div id="currency-summary" class="currency-summary" hidden></div>
+      <div id="personal-oca-card" class="personal-list-card personal-oca-card" hidden>
+        <div class="personal-oca-heading">
+          <div>
+            <span>Saldo pendiente OCA</span>
+            <strong id="personal-oca-outstanding">$ 0</strong>
+          </div>
+          <span class="oca-pill">OCA</span>
+        </div>
+        <h2>Próximas cuotas</h2>
+        <div id="personal-oca-months" class="personal-oca-months"></div>
+      </div>
       <div id="personal-accounts-card" class="personal-list-card" hidden>
         <h2>Por cuenta</h2>
         <div id="personal-account-list" class="personal-account-list"></div>
@@ -110,6 +177,6 @@
       <p id="personal-updated" class="balance-updated" role="status"></p>
     </section>
   </main>
-  <script type="module" src="/enzo.js?v=1"></script>
+  <script type="module" src="/enzo.js?v=2"></script>
 </body>
 </html>
