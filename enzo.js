@@ -8,6 +8,7 @@ import {
 } from "./lib/personal.js?v=2";
 
 const title = document.querySelector("#personal-title");
+const subtitle = document.querySelector("#personal-subtitle");
 const tabs = Array.from(document.querySelectorAll(".personal-tabs .app-tab"));
 const importPanel = document.querySelector("#import-panel");
 const summaryPanel = document.querySelector("#personal-summary-panel");
@@ -490,6 +491,11 @@ function activateView(view) {
   const views = {import:importPanel,summary:summaryPanel,credit:creditPanel};
   Object.entries(views).forEach(([name, panel]) => { panel.hidden = name !== view; });
   title.textContent = view === "summary" ? "Mi estado financiero" : view === "credit" ? "Compra en cuotas" : "Importar gastos";
+  subtitle.textContent = view === "summary"
+    ? "Disponible, deudas y próximos pagos en un vistazo."
+    : view === "credit"
+      ? "La cuota se calcula sola y empieza el mes siguiente."
+      : "Capturas a movimientos, sin registrar uno por uno.";
   tabs.forEach((tab) => {
     const active = tab.dataset.view === view;
     tab.classList.toggle("active", active);
