@@ -1,5 +1,5 @@
 const CONFIG = Object.freeze({
-  VERSION: "2026-09-01-v11",
+  VERSION: "2026-09-01-v12",
   SPREADSHEET_ID: "1QfWNrNWRQsFpWZNnYiItdRDop_d5Hw9CgoNC1s7wMxE",
   SHEET_GID: 1406094759,
   CONFIG_SHEET_GID: 900241103,
@@ -165,6 +165,11 @@ function validatePersonalMovement_(input) {
     if (!Number.isInteger(movement.installments) || movement.installments < 1 || movement.installments > 36) throw new Error("Cuotas inválidas.");
     parseDateParts_(movement.firstInstallment);
     movement.installmentAmount = roundMoney_(movement.amount / movement.installments);
+  } else if (movement.category === "Suscripciones" && movement.account === "OCA Crédito") {
+    if (movement.type !== "Egreso") throw new Error("La suscripción de OCA debe registrarse como egreso.");
+    parseDateParts_(movement.firstInstallment);
+    movement.installments = 0;
+    movement.installmentAmount = roundMoney_(movement.amount);
   } else {
     movement.installments = 0;
     movement.firstInstallment = "";
@@ -230,6 +235,7 @@ function summarizePersonalRows_(rows, today) {
     const firstInstallment = sheetDateText_(row[11]);
     const installmentAmount = Number(row[12]) || (installments > 0 ? amount / installments : 0);
     const isCreditPurchase = category === "Compras a crédito" && account === "OCA Crédito";
+    const isCreditSubscription = category === "Suscripciones" && account === "OCA Crédito";
 
     if (isCreditPurchase) {
       if (currency === "Pesos" && installments > 0 && firstInstallment && isFinite(installmentAmount)) {
@@ -239,6 +245,12 @@ function summarizePersonalRows_(rows, today) {
         oca.months.forEach(function(item) {
           const index = personalMonthDifference_(firstInstallment, item.month);
           if (index >= 0 && index < installments) item.amount += installmentAmount;
+        });
+      }
+    } else if (isCreditSubscription) {
+      if (currency === "Pesos" && firstInstallment && isFinite(installmentAmount) && installmentAmount > 0) {
+        oca.months.forEach(function(item) {
+          if (personalMonthDifference_(firstInstallment, item.month) >= 0) item.amount += installmentAmount;
         });
       }
     } else if (account === "Deuda Mamá") {

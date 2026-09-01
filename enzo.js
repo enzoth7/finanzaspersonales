@@ -5,7 +5,7 @@ import {
   PERSONAL_TYPES,
   parsePersonalImport,
   validatePersonalMovement
-} from "./lib/personal.js?v=2";
+} from "./lib/personal.js?v=3";
 
 const title = document.querySelector("#personal-title");
 const subtitle = document.querySelector("#personal-subtitle");
@@ -35,15 +35,26 @@ const personalOcaCard = document.querySelector("#personal-oca-card");
 const personalOcaOutstanding = document.querySelector("#personal-oca-outstanding");
 const personalOcaMonths = document.querySelector("#personal-oca-months");
 const creditForm = document.querySelector("#credit-form");
+const creditModes = Array.from(document.querySelectorAll('input[name="credit-mode"]'));
+const creditHeadingCopy = document.querySelector("#credit-heading-copy");
 const creditDate = document.querySelector("#credit-date");
+const creditDateLabel = document.querySelector("#credit-date-label");
 const creditDescription = document.querySelector("#credit-description");
+const creditDescriptionLabel = document.querySelector("#credit-description-label");
 const creditTotal = document.querySelector("#credit-total");
+const creditTotalLabel = document.querySelector("#credit-total-label");
+const creditGrid = document.querySelector(".credit-grid");
+const creditInstallmentsField = document.querySelector("#credit-installments-field");
 const creditInstallments = document.querySelector("#credit-installments");
+const creditValueLabel = document.querySelector("#credit-value-label");
 const creditInstallmentValue = document.querySelector("#credit-installment-value");
+const creditFirstLabel = document.querySelector("#credit-first-label");
 const creditFirstMonth = document.querySelector("#credit-first-month");
+const creditNote = document.querySelector("#credit-note");
 const creditError = document.querySelector("#credit-error");
 const creditSuccess = document.querySelector("#credit-success");
 const saveCredit = document.querySelector("#save-credit");
+const saveCreditLabel = document.querySelector("#save-credit-label");
 
 let reviewMovements = [];
 let summaryRequest = null;
@@ -356,7 +367,8 @@ function renderRecent(items) {
     name.textContent = item.description || item.category;
     const meta = document.createElement("div");
     meta.className = "recent-meta";
-    const installmentText = item.installments ? ` · ${item.installments} cuotas` : "";
+    const recurringText = item.category === "Suscripciones" && item.account === "OCA Crédito" ? " · mensual" : "";
+    const installmentText = item.installments ? ` · ${item.installments} cuotas` : recurringText;
     meta.textContent = `${item.date.split("-").reverse().join("/")} · ${item.account} · ${item.category}${installmentText}`;
     copy.append(name, meta);
     const amount = document.createElement("strong");
@@ -430,36 +442,65 @@ async function loadPersonalSummary() {
   return summaryRequest;
 }
 
+function isSubscriptionMode() {
+  return creditModes.find((input) => input.checked)?.value === "subscription";
+}
+
 function updateCreditPreview() {
+  const subscription = isSubscriptionMode();
   const total = Number(creditTotal.value);
   const installments = Number(creditInstallments.value);
-  creditInstallmentValue.textContent = formatMoney(total > 0 && installments > 0 ? total / installments : 0, "Pesos");
+  const previewValue = subscription ? total : total > 0 && installments > 0 ? total / installments : 0;
+  creditInstallmentValue.textContent = formatMoney(previewValue, "Pesos");
   creditFirstMonth.textContent = formatMonth(firstInstallmentDate(creditDate.value));
+}
+
+function updateCreditMode() {
+  const subscription = isSubscriptionMode();
+  creditHeadingCopy.textContent = subscription
+    ? "Registrá el importe mensual para incluirlo en los próximos pagos."
+    : "Registrá el total y la aplicación calcula el valor de cada cuota.";
+  creditDateLabel.textContent = subscription ? "Fecha de alta" : "Fecha de compra";
+  creditDescriptionLabel.textContent = subscription ? "¿Qué suscripción es?" : "¿Qué compraste?";
+  creditDescription.placeholder = subscription ? "Ej. Spotify" : "Ej. Notebook";
+  creditTotalLabel.textContent = subscription ? "Importe mensual" : "Valor total";
+  creditInstallmentsField.hidden = subscription;
+  creditInstallments.required = !subscription;
+  creditGrid.classList.toggle("single", subscription);
+  creditValueLabel.textContent = subscription ? "Pago mensual" : "Valor de cada cuota";
+  creditFirstLabel.textContent = subscription ? "Primer cobro" : "Primera cuota";
+  creditNote.textContent = subscription
+    ? "Se suma a cada mes futuro de OCA hasta que elimines o cambies la fila en MOVIMIENTOS. No reduce tu efectivo hoy."
+    : "Se guardará internamente como “Compras a crédito” en “OCA Crédito”. No reduce tu efectivo hoy.";
+  saveCreditLabel.textContent = subscription ? "Guardar suscripción" : "Guardar compra en cuotas";
+  updateCreditPreview();
 }
 
 creditDate.value = todayInMontevideo();
 creditDate.addEventListener("input", updateCreditPreview);
 creditTotal.addEventListener("input", updateCreditPreview);
 creditInstallments.addEventListener("input", updateCreditPreview);
-updateCreditPreview();
+creditModes.forEach((input) => input.addEventListener("change", updateCreditMode));
+updateCreditMode();
 
 creditForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   creditError.hidden = true;
   creditSuccess.hidden = true;
   try {
+    const subscription = isSubscriptionMode();
     const movement = validatePersonalMovement({
       date:creditDate.value,
       type:"Egreso",
       currency:"Pesos",
       amount:creditTotal.value,
-      category:"Compras a crédito",
+      category:subscription ? "Suscripciones" : "Compras a crédito",
       account:"OCA Crédito",
       description:creditDescription.value,
-      installments:creditInstallments.value,
+      installments:subscription ? 0 : creditInstallments.value,
       firstInstallment:firstInstallmentDate(creditDate.value)
     });
-    if (!movement.description) throw new Error("Indicá qué compraste.");
+    if (!movement.description) throw new Error(subscription ? "Indicá qué suscripción es." : "Indicá qué compraste.");
     saveCredit.disabled = true;
     saveCredit.querySelector("span").textContent = "Guardando…";
     const response = await fetch("/api/personal", {
@@ -468,33 +509,35 @@ creditForm.addEventListener("submit", async (event) => {
       body:JSON.stringify({movements:[movement]})
     });
     const result = await readApiResult(response);
-    if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo guardar la compra.");
-    if (result.duplicates?.length) throw new Error("Esta compra parece ya registrada. Revisá MOVIMIENTOS antes de repetirla.");
-    creditSuccess.textContent = `Compra guardada en ${movement.installments} cuotas de ${formatMoney(movement.installmentAmount, "Pesos")}.`;
+    if (!response.ok || !result.ok) throw new Error(result.error || (subscription ? "No se pudo guardar la suscripción." : "No se pudo guardar la compra."));
+    if (result.duplicates?.length) throw new Error(`${subscription ? "Esta suscripción" : "Esta compra"} parece ya registrada. Revisá MOVIMIENTOS antes de repetirla.`);
+    creditSuccess.textContent = subscription
+      ? `Suscripción guardada por ${formatMoney(movement.installmentAmount, "Pesos")} al mes.`
+      : `Compra guardada en ${movement.installments} cuotas de ${formatMoney(movement.installmentAmount, "Pesos")}.`;
     creditSuccess.hidden = false;
     creditDescription.value = "";
     creditTotal.value = "";
     creditInstallments.value = "";
     creditDate.value = todayInMontevideo();
-    updateCreditPreview();
+    updateCreditMode();
     summaryRequest = null;
   } catch (error) {
-    creditError.textContent = error instanceof Error ? error.message : "No se pudo guardar la compra.";
+    creditError.textContent = error instanceof Error ? error.message : "No se pudo guardar el movimiento de OCA.";
     creditError.hidden = false;
   } finally {
     saveCredit.disabled = false;
-    saveCredit.querySelector("span").textContent = "Guardar compra en cuotas";
+    saveCreditLabel.textContent = isSubscriptionMode() ? "Guardar suscripción" : "Guardar compra en cuotas";
   }
 });
 
 function activateView(view) {
   const views = {import:importPanel,summary:summaryPanel,credit:creditPanel};
   Object.entries(views).forEach(([name, panel]) => { panel.hidden = name !== view; });
-  title.textContent = view === "summary" ? "Mi estado financiero" : view === "credit" ? "Compra en cuotas" : "Importar gastos";
+  title.textContent = view === "summary" ? "Mi estado financiero" : view === "credit" ? "Tarjeta OCA" : "Importar gastos";
   subtitle.textContent = view === "summary"
     ? "Disponible, deudas y próximos pagos en un vistazo."
     : view === "credit"
-      ? "La cuota se calcula sola y empieza el mes siguiente."
+      ? "Compras en cuotas y suscripciones en un mismo lugar."
       : "Capturas a movimientos, sin registrar uno por uno.";
   tabs.forEach((tab) => {
     const active = tab.dataset.view === view;

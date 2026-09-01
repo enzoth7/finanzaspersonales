@@ -105,6 +105,6 @@ Después se puede importar esta carpeta en Vercel sin cambiar la planilla.
 
 ## Control rápido personal y compras OCA
 
-La ruta `/enzo` permite importar movimientos, revisar el estado por moneda y registrar compras OCA. En `Crédito` solo se indica la fecha, qué se compró, el total y la cantidad de cuotas. La aplicación guarda internamente la categoría `Compras a crédito`, la cuenta `OCA Crédito`, la primera cuota del mes siguiente y el importe dividido.
+La ruta `/enzo` permite importar movimientos, revisar el estado por moneda y registrar compras o suscripciones de OCA. En `Crédito` se puede elegir entre una compra en cuotas y una suscripción mensual. Las suscripciones se proyectan en cada mes futuro hasta que se quite o modifique su fila en `MOVIMIENTOS`.
 
 La pestaña `DASHBOARD` de la planilla personal contiene desde la fila 68 un control rápido con gasto del mes, disponible, principales rubros y la proyección de OCA de los próximos seis meses. Las compras a crédito cuentan como gasto del mes, pero no reducen el efectivo disponible hasta que se registra el pago real de OCA.

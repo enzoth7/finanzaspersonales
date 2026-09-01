@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=8">
-  <link rel="stylesheet" href="/enzo.css?v=2">
+  <link rel="stylesheet" href="/enzo.css?v=3">
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -41,20 +41,9 @@
     </nav>
 
     <section id="import-panel" class="view-panel" role="tabpanel" aria-labelledby="import-tab">
-      <div class="gem-card">
-        <div class="gem-card-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M12 2c.8 5.4 4.6 9.2 10 10-5.4.8-9.2 4.6-10 10-.8-5.4-4.6-9.2-10-10 5.4-.8 9.2-4.6 10-10Z"/></svg>
-        </div>
-        <div>
-          <h2>1. Leé las capturas</h2>
-          <p>Subilas al Gem y pedile que genere el bloque de movimientos.</p>
-        </div>
-        <a id="open-gemini" class="secondary-action" href="https://gemini.google.com/u/1/gem/33f8e0f7559d" target="_blank" rel="noreferrer">Abrir Gemini</a>
-      </div>
-
       <div class="import-card">
         <div class="section-copy">
-          <p class="step-label">2. Pegá el resultado</p>
+          <p class="step-label">1. Pegá el resultado</p>
           <h2>Movimientos detectados</h2>
           <p>Gemini debe responder únicamente con el bloque JSON.</p>
         </div>
@@ -72,7 +61,7 @@
       <section id="review-section" class="review-section" aria-labelledby="review-title" hidden>
         <div class="review-heading">
           <div>
-            <p class="step-label">3. Revisá y confirmá</p>
+            <p class="step-label">2. Revisá y confirmá</p>
             <h2 id="review-title">Antes de guardar</h2>
           </div>
           <span id="review-count" class="count-pill">0</span>
@@ -93,26 +82,40 @@
           <svg viewBox="0 0 24 24"><path d="M3 7h18v11H3zM3 10h18M7 15h3"/></svg>
         </div>
         <div>
-          <h2>Compra con OCA</h2>
-          <p>Registrá el total y la aplicación calcula el valor de cada cuota.</p>
+          <h2 id="credit-heading-title">Tarjeta OCA</h2>
+          <p id="credit-heading-copy">Registrá compras en cuotas o suscripciones mensuales.</p>
         </div>
       </div>
 
       <form id="credit-form" class="credit-form" novalidate>
+        <fieldset class="credit-mode-group">
+          <legend>¿Qué querés registrar?</legend>
+          <div class="segmented credit-mode">
+            <label class="mode-installments">
+              <input type="radio" name="credit-mode" value="installments" checked>
+              <span>Compra en cuotas</span>
+            </label>
+            <label class="mode-subscription">
+              <input type="radio" name="credit-mode" value="subscription">
+              <span>Suscripción</span>
+            </label>
+          </div>
+        </fieldset>
+
         <label class="credit-field" for="credit-date">
-          <span>Fecha de compra</span>
+          <span id="credit-date-label">Fecha de compra</span>
           <input id="credit-date" type="date" required>
         </label>
         <label class="credit-field" for="credit-description">
-          <span>¿Qué compraste?</span>
+          <span id="credit-description-label">¿Qué compraste?</span>
           <input id="credit-description" type="text" maxlength="300" autocomplete="off" placeholder="Ej. Notebook" required>
         </label>
         <div class="credit-grid">
           <label class="credit-field" for="credit-total">
-            <span>Valor total</span>
+            <span id="credit-total-label">Valor total</span>
             <input id="credit-total" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0" required>
           </label>
-          <label class="credit-field" for="credit-installments">
+          <label id="credit-installments-field" class="credit-field" for="credit-installments">
             <span>Cantidad de cuotas</span>
             <input id="credit-installments" type="number" inputmode="numeric" min="1" max="36" step="1" placeholder="1" required>
           </label>
@@ -120,21 +123,21 @@
 
         <div class="credit-preview" aria-live="polite">
           <div>
-            <span>Valor de cada cuota</span>
+            <span id="credit-value-label">Valor de cada cuota</span>
             <strong id="credit-installment-value">$ 0</strong>
           </div>
           <div>
-            <span>Primera cuota</span>
+            <span id="credit-first-label">Primera cuota</span>
             <strong id="credit-first-month">—</strong>
           </div>
         </div>
 
-        <p class="credit-note">Se guardará internamente como “Compras a crédito” en “OCA Crédito”. No reduce tu efectivo hoy.</p>
+        <p id="credit-note" class="credit-note">Se guardará internamente como “Compras a crédito” en “OCA Crédito”. No reduce tu efectivo hoy.</p>
         <p id="credit-error" class="message error" role="alert" hidden></p>
         <p id="credit-success" class="message success" role="status" hidden></p>
         <button id="save-credit" class="submit" type="submit">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-          <span>Guardar compra en cuotas</span>
+          <span id="save-credit-label">Guardar compra en cuotas</span>
         </button>
       </form>
     </section>
@@ -157,12 +160,12 @@
       <div id="personal-oca-card" class="personal-list-card personal-oca-card" hidden>
         <div class="personal-oca-heading">
           <div>
-            <span>Saldo pendiente OCA</span>
+            <span>Saldo pendiente en cuotas</span>
             <strong id="personal-oca-outstanding">$ 0</strong>
           </div>
           <span class="oca-pill">OCA</span>
         </div>
-        <h2>Próximas cuotas</h2>
+        <h2>Próximos pagos: cuotas y suscripciones</h2>
         <div id="personal-oca-months" class="personal-oca-months"></div>
       </div>
       <div id="personal-accounts-card" class="personal-list-card" hidden>
@@ -177,6 +180,6 @@
       <p id="personal-updated" class="balance-updated" role="status"></p>
     </section>
   </main>
-  <script type="module" src="/enzo.js?v=3"></script>
+  <script type="module" src="/enzo.js?v=4"></script>
 </body>
 </html>
