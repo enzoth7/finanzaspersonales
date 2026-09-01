@@ -5,6 +5,7 @@ import process from "node:process";
 import handler from "./api/gastos.js";
 import balancesHandler from "./api/saldos.js";
 import ocaHandler from "./api/oca.js";
+import personalHandler from "./api/personal.js";
 
 const root = process.cwd();
 const port = Number(process.env.PORT || 3002);
@@ -97,6 +98,12 @@ const server = createServer(async (request, response) => {
     if (url.pathname === "/api/oca") {
       addVercelResponseHelpers(response);
       await ocaHandler(request, response);
+      return;
+    }
+    if (url.pathname === "/api/personal") {
+      addVercelResponseHelpers(response);
+      if (request.method === "POST") request.body = await readJsonBody(request);
+      await personalHandler(request, response);
       return;
     }
     await serveStatic(decodeURIComponent(url.pathname), response);

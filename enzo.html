@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es-UY">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Importación y estado de las finanzas personales de Enzo">
+  <title>Mis finanzas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=8">
+  <link rel="stylesheet" href="/enzo.css?v=1">
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+  <main id="main" class="personal-main">
+    <header class="page-header">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 2v20M17 6.5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </div>
+      <div>
+        <h1 id="personal-title">Importar gastos</h1>
+        <p class="personal-subtitle">Capturas a movimientos, sin registrar uno por uno.</p>
+      </div>
+    </header>
+
+    <nav class="app-tabs personal-tabs" role="tablist" aria-label="Secciones de finanzas personales">
+      <button id="import-tab" class="app-tab active" type="button" role="tab" aria-selected="true" aria-controls="import-panel" data-view="import">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+        <span>Importar</span>
+      </button>
+      <button id="personal-summary-tab" class="app-tab" type="button" role="tab" aria-selected="false" aria-controls="personal-summary-panel" data-view="summary">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7H4a2 2 0 0 1 0-4h13v4M4 7v12a2 2 0 0 0 2 2h14V7H4Z"/><path d="M16 14h.01"/></svg>
+        <span>Mi estado</span>
+      </button>
+    </nav>
+
+    <section id="import-panel" class="view-panel" role="tabpanel" aria-labelledby="import-tab">
+      <div class="gem-card">
+        <div class="gem-card-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 2c.8 5.4 4.6 9.2 10 10-5.4.8-9.2 4.6-10 10-.8-5.4-4.6-9.2-10-10 5.4-.8 9.2-4.6 10-10Z"/></svg>
+        </div>
+        <div>
+          <h2>1. Leé las capturas</h2>
+          <p>Subilas al Gem y pedile que genere el bloque de movimientos.</p>
+        </div>
+        <a id="open-gemini" class="secondary-action" href="https://gemini.google.com/u/1/gem/33f8e0f7559d" target="_blank" rel="noreferrer">Abrir Gemini</a>
+      </div>
+
+      <div class="import-card">
+        <div class="section-copy">
+          <p class="step-label">2. Pegá el resultado</p>
+          <h2>Movimientos detectados</h2>
+          <p>Gemini debe responder únicamente con el bloque JSON.</p>
+        </div>
+        <label class="field import-field" for="import-text">
+          <span>Bloque generado por Gemini</span>
+          <textarea id="import-text" rows="8" spellcheck="false" placeholder='[{"fecha":"2026-09-01","tipo":"Egreso","moneda":"Pesos","importe":450,"categoria":"Comida","cuenta":"Revolut","descripcion":"Supermercado"}]'></textarea>
+        </label>
+        <p id="parse-error" class="message error" role="alert" hidden></p>
+        <button id="analyze-import" class="submit compact-submit" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+          <span>Revisar movimientos</span>
+        </button>
+      </div>
+
+      <section id="review-section" class="review-section" aria-labelledby="review-title" hidden>
+        <div class="review-heading">
+          <div>
+            <p class="step-label">3. Revisá y confirmá</p>
+            <h2 id="review-title">Antes de guardar</h2>
+          </div>
+          <span id="review-count" class="count-pill">0</span>
+        </div>
+        <div id="review-list" class="review-list"></div>
+        <p id="save-error" class="message error" role="alert" hidden></p>
+        <button id="save-import" class="submit" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>Guardar movimientos</span>
+        </button>
+      </section>
+      <p id="save-success" class="message success" role="status" hidden></p>
+    </section>
+
+    <section id="personal-summary-panel" class="view-panel" role="tabpanel" aria-labelledby="personal-summary-tab" hidden>
+      <div class="personal-summary-heading">
+        <div>
+          <h2>Tu situación actual</h2>
+          <p>Leído desde la pestaña MOVIMIENTOS.</p>
+        </div>
+        <button id="refresh-personal" class="refresh-button" type="button" aria-label="Actualizar estado personal">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
+        </button>
+      </div>
+      <div id="personal-loading" class="balance-loading" aria-hidden="true">
+        <div class="skeleton-row"></div>
+        <div class="skeleton-row"></div>
+      </div>
+      <div id="currency-summary" class="currency-summary" hidden></div>
+      <div id="personal-accounts-card" class="personal-list-card" hidden>
+        <h2>Por cuenta</h2>
+        <div id="personal-account-list" class="personal-account-list"></div>
+      </div>
+      <div id="recent-card" class="personal-list-card" hidden>
+        <h2>Últimos movimientos</h2>
+        <div id="recent-list" class="recent-list"></div>
+      </div>
+      <p id="personal-error" class="message error" role="alert" hidden></p>
+      <p id="personal-updated" class="balance-updated" role="status"></p>
+    </section>
+  </main>
+  <script type="module" src="/enzo.js?v=1"></script>
+</body>
+</html>

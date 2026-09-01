@@ -1,5 +1,5 @@
 const CONFIG = Object.freeze({
-  VERSION: "2026-08-31-v9",
+  VERSION: "2026-09-01-v10",
   SPREADSHEET_ID: "1QfWNrNWRQsFpWZNnYiItdRDop_d5Hw9CgoNC1s7wMxE",
   SHEET_GID: 1406094759,
   CONFIG_SHEET_GID: 900241103,
@@ -13,7 +13,9 @@ const CONFIG = Object.freeze({
   ERROR_LABEL: "finanzas-error",
   OCA_SPREADSHEET_ID: "1cnAoaGhzMyu0mFg5U_WZ6XBRQJkTmAlIaFbZlmNwdtI",
   OCA_SHEET_GID: 955665856,
-  OCA_RANGE: "F18:J40"
+  OCA_RANGE: "F18:J40",
+  PERSONAL_SPREADSHEET_ID: "1rPs2YmiHSdpB_m4XDHEz1LFcH1LbWU4TRIWf0InjvKs",
+  PERSONAL_SHEET_NAME: "MOVIMIENTOS"
 });
 
 function doGet() {
@@ -37,12 +39,199 @@ function doPost(event) {
     if (payload.action === "oca") {
       return json_(Object.assign({ok:true,version:CONFIG.VERSION}, getOcaStatus_()));
     }
+    if (payload.action === "personalSummary") {
+      return json_(Object.assign({ok:true,version:CONFIG.VERSION}, getPersonalSummary_()));
+    }
+    if (payload.action === "personalImport") {
+      return json_(Object.assign({ok:true,version:CONFIG.VERSION}, appendPersonalMovements_(payload.movements)));
+    }
     const expense = validateExpense_(payload);
     const saved = appendExpense_(expense);
     return json_({ok:true,row:saved.row,sheet:saved.sheet,version:CONFIG.VERSION});
   } catch (error) {
     return json_({ok:false,error:error.message || "No se pudo guardar el movimiento."});
   }
+}
+
+function getPersonalSheet_() {
+  const spreadsheet = SpreadsheetApp.openById(CONFIG.PERSONAL_SPREADSHEET_ID);
+  const sheet = spreadsheet.getSheetByName(CONFIG.PERSONAL_SHEET_NAME);
+  if (!sheet) throw new Error("No se encontró la pestaña MOVIMIENTOS de la planilla personal.");
+  return sheet;
+}
+
+function appendPersonalMovements_(input) {
+  if (!Array.isArray(input) || input.length < 1 || input.length > 100) {
+    throw new Error("La importación debe contener entre 1 y 100 movimientos.");
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = getPersonalSheet_();
+    const lastRow = Math.max(sheet.getLastRow(), 1);
+    const existingFingerprints = {};
+    if (lastRow >= 2) {
+      sheet.getRange(2, 9, lastRow - 1, 1).getDisplayValues().forEach(function(row) {
+        const value = cleanText_(row[0], 128);
+        if (value) existingFingerprints[value] = true;
+      });
+    }
+
+    const rows = [];
+    const duplicates = [];
+    input.forEach(function(raw, index) {
+      const movement = validatePersonalMovement_(raw);
+      const fingerprint = personalFingerprint_(movement);
+      if (existingFingerprints[fingerprint] && !movement.allowDuplicate) {
+        duplicates.push({index:index,fingerprint:fingerprint,description:movement.description});
+        return;
+      }
+
+      const date = Utilities.parseDate(movement.date, "America/Montevideo", "yyyy-MM-dd");
+      rows.push([
+        Utilities.getUuid(),
+        date,
+        movement.type,
+        movement.currency,
+        movement.amount,
+        movement.category,
+        movement.account,
+        movement.description,
+        fingerprint,
+        new Date()
+      ]);
+      existingFingerprints[fingerprint] = true;
+    });
+
+    if (rows.length) {
+      const startRow = Math.max(sheet.getLastRow() + 1, 2);
+      sheet.getRange(startRow, 1, rows.length, 10).setValues(rows);
+      sheet.getRange(startRow, 2, rows.length, 1).setNumberFormat("dd/mm/yyyy");
+      sheet.getRange(startRow, 5, rows.length, 1).setNumberFormat("0.00");
+      sheet.getRange(startRow, 10, rows.length, 1).setNumberFormat("dd/mm/yyyy hh:mm");
+      SpreadsheetApp.flush();
+    }
+
+    return {inserted:rows.length,duplicates:duplicates};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function validatePersonalMovement_(input) {
+  const allowedTypes = ["Ingreso", "Egreso"];
+  const allowedCurrencies = ["Pesos", "Dolares", "Euros"];
+  const allowedAccounts = ["Efectivo", "BROU", "OCA Blue", "Prex", "N26", "Paypal", "Revolut", "Fiverr", "Grow", "Deuda Mamá", "Mercado Pago"];
+  const allowedCategories = [
+    "Mama", "Ahorro", "Prestamo", "Freelancer", "Ventas", "Otros (Dev IVA, Amigos, etc)",
+    "Saldo Inicial", "Cambio de moneda", "Ahorros", "Prestamos", "OCA", "Comida", "Transporte",
+    "Celular", "Gimnasio", "Ropa", "Suscripciones", "Educacion y eventos", "Viajes",
+    "Entretenimietno y salidas", "Salud y estetica", "Compras", "Otros asuntos",
+    "Comisiones bancarias", "Capex", "Ciudadania italiana", "Inversiones", "Pago Deuda Mamá"
+  ];
+  const movement = {
+    date:cleanText_(input && input.date, 10),
+    type:cleanText_(input && input.type, 16),
+    currency:cleanText_(input && input.currency, 16),
+    amount:Number(input && input.amount),
+    category:cleanText_(input && input.category, 80),
+    account:cleanText_(input && input.account, 80),
+    description:cleanText_(input && input.description, 300),
+    allowDuplicate:Boolean(input && input.allowDuplicate)
+  };
+
+  parseDateParts_(movement.date);
+  if (allowedTypes.indexOf(movement.type) === -1) throw new Error("Tipo personal inválido.");
+  if (allowedCurrencies.indexOf(movement.currency) === -1) throw new Error("Moneda personal inválida.");
+  if (!isFinite(movement.amount) || movement.amount <= 0 || movement.amount > 100000000) throw new Error("Importe personal inválido.");
+  if (allowedCategories.indexOf(movement.category) === -1) throw new Error("Categoría personal inválida: " + movement.category);
+  if (allowedAccounts.indexOf(movement.account) === -1) throw new Error("Cuenta personal inválida: " + movement.account);
+  return movement;
+}
+
+function personalFingerprint_(movement) {
+  const canonical = [
+    movement.date,
+    movement.type,
+    movement.currency,
+    movement.amount.toFixed(2),
+    normalizeText_(movement.category),
+    normalizeText_(movement.account),
+    normalizeText_(movement.description)
+  ].join("|");
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, canonical)
+    .map(function(byte) { return (byte + 256).toString(16).slice(-2); })
+    .join("");
+}
+
+function getPersonalSummary_() {
+  const sheet = getPersonalSheet_();
+  const lastRow = sheet.getLastRow();
+  const rows = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, 10).getValues() : [];
+  const summary = summarizePersonalRows_(rows);
+  summary.updatedAt = new Date().toISOString();
+  return summary;
+}
+
+function summarizePersonalRows_(rows) {
+  const currencies = {};
+  const accounts = {};
+  const recent = [];
+
+  ["Pesos", "Dolares", "Euros"].forEach(function(currency) {
+    currencies[currency] = {available:0,debt:0,net:0};
+  });
+
+  rows.forEach(function(row) {
+    const date = sheetDateText_(row[1]);
+    const type = cleanText_(row[2], 16);
+    const currency = cleanText_(row[3], 16);
+    const amount = Number(row[4]);
+    const category = cleanText_(row[5], 80);
+    const account = cleanText_(row[6], 80);
+    if (!date || ["Ingreso", "Egreso"].indexOf(type) === -1 || !currencies[currency] || !isFinite(amount) || amount <= 0) return;
+
+    if (account === "Deuda Mamá") {
+      currencies[currency].debt += type === "Egreso" ? amount : -amount;
+    } else {
+      const key = currency + "|" + account;
+      if (!accounts[key]) accounts[key] = {currency:currency,account:account,amount:0};
+      accounts[key].amount += type === "Ingreso" ? amount : -amount;
+      currencies[currency].available += type === "Ingreso" ? amount : -amount;
+    }
+    if (category === "Pago Deuda Mamá" && account !== "Deuda Mamá" && type === "Egreso") {
+      currencies[currency].debt -= amount;
+    }
+
+    recent.push({
+      id:cleanText_(row[0], 80),date:date,type:type,currency:currency,amount:amount,
+      category:category,account:account,description:cleanText_(row[7], 300)
+    });
+  });
+
+  Object.keys(currencies).forEach(function(currency) {
+    currencies[currency].available = roundMoney_(currencies[currency].available);
+    currencies[currency].debt = roundMoney_(Math.max(0, currencies[currency].debt));
+    currencies[currency].net = roundMoney_(currencies[currency].available - currencies[currency].debt);
+  });
+
+  const accountList = Object.keys(accounts).map(function(key) {
+    return {currency:accounts[key].currency,account:accounts[key].account,amount:roundMoney_(accounts[key].amount)};
+  }).sort(function(a, b) {
+    return a.currency.localeCompare(b.currency) || a.account.localeCompare(b.account);
+  });
+
+  return {
+    currencies:currencies,
+    accounts:accountList,
+    recent:recent.slice(-10).reverse(),
+    movements:recent.length
+  };
+}
+
+function roundMoney_(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
 }
 
 function getOcaStatus_() {

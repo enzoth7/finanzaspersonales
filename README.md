@@ -18,6 +18,21 @@ Destino:
 - apps-script/Code.gs: escribe en la hoja existente y procesa correos.
 - apps-script/appsscript.json: permisos mínimos de Apps Script.
 
+## Finanzas personales de Enzo
+
+La ruta `/enzo` mantiene el flujo personal separado de la carga familiar. Usa la planilla existente `2026-2028 FINANZAS` (`1rPs2YmiHSdpB_m4XDHEz1LFcH1LbWU4TRIWf0InjvKs`) y la pestaña `MOVIMIENTOS`:
+
+- `enzo.html`, `enzo.css` y `enzo.js`: importación móvil de lotes generados a partir de capturas y resumen por moneda.
+- `api/personal.js`: valida hasta 100 movimientos por lote y solicita su escritura o resumen a Apps Script.
+- `lib/personal.js`: normaliza fechas, importes, monedas, categorías y cuentas.
+- `docs/gem-gastos-enzo.md`: instrucciones del Gem que transforma capturas en JSON.
+
+El resumen no mezcla monedas. Muestra por separado pesos, dólares y euros, con dinero en cuentas, deuda con mamá y disponible neto. Una compra con cuenta `Deuda Mamá` aumenta la deuda; un egreso con categoría `Pago Deuda Mamá` la reduce sin volver a contar la compra.
+
+Los movimientos repetidos se comparan mediante una huella de fecha, tipo, moneda, importe, categoría, cuenta y descripción. Un posible duplicado no se elimina: vuelve a la revisión y puede confirmarse como una compra legítima diferente.
+
+Después de reemplazar `Code.gs`, se debe crear una versión nueva de la implementación web de Apps Script. La pestaña familiar y la pestaña personal usan la misma URL `/exec`, pero escriben en archivos distintos según la acción solicitada.
+
 El formulario muestra categorías distintas según el tipo de movimiento. Los egresos e ingresos se validan también en el servidor para evitar combinaciones incorrectas.
 
 ## Dinero disponible

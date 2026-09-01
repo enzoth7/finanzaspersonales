@@ -10,8 +10,14 @@
     },
     "api/oca.js": {
       "maxDuration": 10
+    },
+    "api/personal.js": {
+      "maxDuration": 10
     }
   },
+  "rewrites": [
+    {"source": "/enzo", "destination": "/enzo.html"}
+  ],
   "headers": [
     {
       "source": "/(.*)",
