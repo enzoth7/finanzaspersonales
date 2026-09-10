@@ -1,5 +1,13 @@
 import { validateExpense } from "../lib/expense.js";
 
+function validateSubmissionId(value) {
+  const submissionId = String(value || "").trim();
+  if (!/^[a-zA-Z0-9_-]{16,100}$/.test(submissionId)) {
+    throw new Error("El identificador del movimiento no es válido. Actualizá la aplicación y volvé a intentar.");
+  }
+  return submissionId;
+}
+
 function reply(response, status, payload) {
   response.status(status);
   response.setHeader("Cache-Control", "no-store");
@@ -16,6 +24,7 @@ export default async function handler(request, response) {
   try {
     const body = typeof request.body === "string" ? JSON.parse(request.body) : request.body || {};
     const expense = validateExpense({...body, account:"Efectivo"});
+    const submissionId = validateSubmissionId(body.submissionId);
     if (process.env.DRY_RUN === "true") {
       return reply(response, 200, {ok:true,dryRun:true,row:null});
     }
@@ -30,6 +39,7 @@ export default async function handler(request, response) {
       headers:{"Content-Type":"text/plain;charset=utf-8"},
       body:JSON.stringify({
         ...expense,
+        submissionId,
         secret:process.env.WEBHOOK_SECRET || "",
         source:"Web"
       }),
@@ -49,7 +59,7 @@ export default async function handler(request, response) {
     if (!upstream.ok || !result.ok) {
       throw new Error("Apps Script: " + (result.error || "No se pudo guardar en Google Sheets."));
     }
-    return reply(response, 200, {ok:true,row:result.row});
+    return reply(response, 200, {ok:true,row:result.row,duplicate:Boolean(result.duplicate)});
   } catch (error) {
     return reply(response, 400, {ok:false,error:error instanceof Error ? error.message : "No se pudo guardar el gasto."});
   }

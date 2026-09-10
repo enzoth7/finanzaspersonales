@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=8">
-  <link rel="stylesheet" href="/enzo.css?v=3">
+  <link rel="stylesheet" href="/enzo.css?v=4">
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -156,6 +156,11 @@
         <div class="skeleton-row"></div>
         <div class="skeleton-row"></div>
       </div>
+      <article id="personal-total-card" class="personal-total-card" hidden>
+        <span>Total disponible hoy</span>
+        <strong id="personal-total">$ 0</strong>
+        <small id="personal-total-note">Pesos, dólares y euros convertidos a pesos uruguayos.</small>
+      </article>
       <div id="currency-summary" class="currency-summary" hidden></div>
       <div id="personal-oca-card" class="personal-list-card personal-oca-card" hidden>
         <div class="personal-oca-heading">
@@ -168,10 +173,6 @@
         <h2>Próximos pagos: cuotas y suscripciones</h2>
         <div id="personal-oca-months" class="personal-oca-months"></div>
       </div>
-      <div id="personal-accounts-card" class="personal-list-card" hidden>
-        <h2>Por cuenta</h2>
-        <div id="personal-account-list" class="personal-account-list"></div>
-      </div>
       <div id="recent-card" class="personal-list-card" hidden>
         <h2>Últimos movimientos</h2>
         <div id="recent-list" class="recent-list"></div>
@@ -180,6 +181,6 @@
       <p id="personal-updated" class="balance-updated" role="status"></p>
     </section>
   </main>
-  <script type="module" src="/enzo.js?v=4"></script>
+  <script type="module" src="/enzo.js?v=5"></script>
 </body>
 </html>

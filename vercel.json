@@ -3,7 +3,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/gastos.js": {
-      "maxDuration": 10
+      "maxDuration": 60
     },
     "api/saldos.js": {
       "maxDuration": 10

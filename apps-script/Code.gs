@@ -1,5 +1,5 @@
 const CONFIG = Object.freeze({
-  VERSION: "2026-09-01-v12",
+  VERSION: "2026-09-01-v14",
   SPREADSHEET_ID: "1QfWNrNWRQsFpWZNnYiItdRDop_d5Hw9CgoNC1s7wMxE",
   SHEET_GID: 1406094759,
   CONFIG_SHEET_GID: 900241103,
@@ -15,7 +15,9 @@ const CONFIG = Object.freeze({
   OCA_SHEET_GID: 955665856,
   OCA_RANGE: "F18:J40",
   PERSONAL_SPREADSHEET_ID: "1rPs2YmiHSdpB_m4XDHEz1LFcH1LbWU4TRIWf0InjvKs",
-  PERSONAL_SHEET_NAME: "MOVIMIENTOS"
+  PERSONAL_SHEET_NAME: "MOVIMIENTOS",
+  PERSONAL_DASHBOARD_SHEET_NAME: "DASHBOARD",
+  PERSONAL_EXCHANGE_RATE_RANGE: "P4:P5"
 });
 
 function doGet() {
@@ -46,8 +48,9 @@ function doPost(event) {
       return json_(Object.assign({ok:true,version:CONFIG.VERSION}, appendPersonalMovements_(payload.movements)));
     }
     const expense = validateExpense_(payload);
-    const saved = appendExpense_(expense);
-    return json_({ok:true,row:saved.row,sheet:saved.sheet,version:CONFIG.VERSION});
+    const submissionId = validateSubmissionId_(payload.submissionId);
+    const saved = appendExpense_(expense, submissionId);
+    return json_({ok:true,row:saved.row,sheet:saved.sheet,duplicate:saved.duplicate,version:CONFIG.VERSION});
   } catch (error) {
     return json_({ok:false,error:error.message || "No se pudo guardar el movimiento."});
   }
@@ -197,15 +200,29 @@ function personalFingerprint_(movement) {
 }
 
 function getPersonalSummary_() {
-  const sheet = getPersonalSheet_();
+  const spreadsheet = SpreadsheetApp.openById(CONFIG.PERSONAL_SPREADSHEET_ID);
+  const sheet = spreadsheet.getSheetByName(CONFIG.PERSONAL_SHEET_NAME);
+  if (!sheet) throw new Error("No se encontró la pestaña " + CONFIG.PERSONAL_SHEET_NAME + ".");
   const lastRow = sheet.getLastRow();
   const rows = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, 13).getValues() : [];
-  const summary = summarizePersonalRows_(rows);
+  const summary = summarizePersonalRows_(rows, null, getPersonalExchangeRates_(spreadsheet));
   summary.updatedAt = new Date().toISOString();
   return summary;
 }
 
-function summarizePersonalRows_(rows, today) {
+function getPersonalExchangeRates_(spreadsheet) {
+  const dashboard = spreadsheet.getSheetByName(CONFIG.PERSONAL_DASHBOARD_SHEET_NAME);
+  if (!dashboard) throw new Error("No se encontró la pestaña " + CONFIG.PERSONAL_DASHBOARD_SHEET_NAME + ".");
+  const values = dashboard.getRange(CONFIG.PERSONAL_EXCHANGE_RATE_RANGE).getValues();
+  const rates = {Dolares:Number(values[0][0]),Euros:Number(values[1][0])};
+  if (!isFinite(rates.Dolares) || rates.Dolares <= 0 || !isFinite(rates.Euros) || rates.Euros <= 0) {
+    throw new Error("Revisá las cotizaciones de compra USD y EUR en DASHBOARD!" + CONFIG.PERSONAL_EXCHANGE_RATE_RANGE + ".");
+  }
+  return rates;
+}
+
+function summarizePersonalRows_(rows, today, exchangeRates) {
+  const rates = Object.assign({Dolares:0,Euros:0}, exchangeRates || {});
   const currencies = {};
   const accounts = {};
   const recent = [];
@@ -286,9 +303,16 @@ function summarizePersonalRows_(rows, today) {
 
   oca.outstanding = roundMoney_(oca.outstanding);
   oca.months.forEach(function(item) { item.amount = roundMoney_(item.amount); });
+  const totalAvailablePesos = roundMoney_(
+    currencies.Pesos.available +
+    currencies.Dolares.available * Number(rates.Dolares || 0) +
+    currencies.Euros.available * Number(rates.Euros || 0)
+  );
 
   return {
     currencies:currencies,
+    totalAvailablePesos:totalAvailablePesos,
+    exchangeRates:{Dolares:Number(rates.Dolares || 0),Euros:Number(rates.Euros || 0)},
     accounts:accountList,
     oca:oca,
     recent:recent.slice(-10).reverse(),
@@ -477,10 +501,50 @@ function sheetDateText_(value) {
   return match[3] + "-" + String(match[2]).padStart(2, "0") + "-" + String(match[1]).padStart(2, "0");
 }
 
-function appendExpense_(expense) {
+function validateSubmissionId_(value) {
+  const submissionId = cleanText_(value, 100);
+  if (!/^[a-zA-Z0-9_-]{16,100}$/.test(submissionId)) {
+    throw new Error("El identificador del movimiento no es válido. Actualizá la aplicación y volvé a intentar.");
+  }
+  return submissionId;
+}
+
+function expenseFingerprint_(expense) {
+  return JSON.stringify([
+    expense.date,
+    expense.type,
+    expense.amount,
+    expense.category,
+    expense.account,
+    expense.description
+  ]);
+}
+
+function readRecentExpenseSubmissionIds_(properties) {
+  try {
+    const value = JSON.parse(properties.getProperty("RECENT_EXPENSE_SUBMISSION_IDS") || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function appendExpense_(expense, submissionId) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
+    const properties = PropertiesService.getScriptProperties();
+    const propertyKey = "EXPENSE_SUBMISSION_" + submissionId;
+    const fingerprint = expenseFingerprint_(expense);
+    const previousText = properties.getProperty(propertyKey);
+    const previous = previousText ? JSON.parse(previousText) : null;
+    if (previous) {
+      if (previous.fingerprint !== fingerprint) {
+        throw new Error("El identificador ya fue usado para otro movimiento.");
+      }
+      return {row:previous.row,sheet:previous.sheet,duplicate:true};
+    }
+
     const sheet = getTargetSheet_(expense.date);
     const row = findFirstBlankRow_(sheet);
     if (row > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 50);
@@ -502,7 +566,16 @@ function appendExpense_(expense) {
     ]]);
     target.getCell(1, 1).setNumberFormat("dd/mm/yyyy");
     SpreadsheetApp.flush();
-    return {row:row,sheet:sheet.getName()};
+    const saved = {fingerprint:fingerprint,row:row,sheet:sheet.getName(),savedAt:Date.now()};
+    properties.setProperty(propertyKey, JSON.stringify(saved));
+
+    const recentIds = readRecentExpenseSubmissionIds_(properties).filter(function(id) { return id !== submissionId; });
+    recentIds.unshift(submissionId);
+    recentIds.slice(100).forEach(function(id) {
+      properties.deleteProperty("EXPENSE_SUBMISSION_" + id);
+    });
+    properties.setProperty("RECENT_EXPENSE_SUBMISSION_IDS", JSON.stringify(recentIds.slice(0, 100)));
+    return {row:row,sheet:sheet.getName(),duplicate:false};
   } finally {
     lock.releaseLock();
   }

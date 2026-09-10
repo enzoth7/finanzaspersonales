@@ -140,7 +140,7 @@ test("la API personal envía un lote validado a Apps Script", async () => {
   }
 });
 
-test("calcula disponible y deuda con mamá sin sumar monedas", () => {
+test("calcula el total disponible convirtiendo monedas y sin restar la deuda", () => {
   const source = fs.readFileSync(new URL("../apps-script/Code.gs", import.meta.url), "utf8");
   const context = {
     console,
@@ -157,14 +157,17 @@ test("calcula disponible y deuda con mamá sin sumar monedas", () => {
     ["5","2026-09-01","Ingreso","Dolares",200,"Freelancer","Paypal","Trabajo","",new Date()],
     ["6","2026-09-01","Egreso","Dolares",50,"Comida","Revolut","Cena","",new Date()],
     ["7","2026-09-01","Egreso","Pesos",1200,"Compras a crédito","OCA Crédito","Notebook","",new Date(),3,"2026-10-01",400],
-    ["8","2026-09-01","Egreso","Pesos",250,"Suscripciones","OCA Crédito","Software","",new Date(),"","2026-10-01",250]
-  ], "2026-09-15");
+    ["8","2026-09-01","Egreso","Pesos",250,"Suscripciones","OCA Crédito","Software","",new Date(),"","2026-10-01",250],
+    ["9","2026-09-01","Ingreso","Euros",10,"Saldo Inicial","N26","Disponible","",new Date()]
+  ], "2026-09-15", {Dolares:40,Euros:45});
   assert.deepEqual(JSON.parse(JSON.stringify(result.currencies)), {
     Pesos:{available:7000,debt:2000,net:5000},
     Dolares:{available:150,debt:0,net:150},
-    Euros:{available:0,debt:0,net:0}
+    Euros:{available:10,debt:0,net:10}
   });
-  assert.equal(result.movements, 8);
+  assert.equal(result.totalAvailablePesos, 13450);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.exchangeRates)), {Dolares:40,Euros:45});
+  assert.equal(result.movements, 9);
   assert.equal(result.oca.outstanding, 1200);
   assert.deepEqual(JSON.parse(JSON.stringify(result.oca.months.slice(0, 4))), [
     {month:"2026-10-01",amount:650},

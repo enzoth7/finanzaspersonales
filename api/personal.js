@@ -45,15 +45,21 @@ export default async function handler(request, response) {
             Dolares:{available:0,debt:0,net:0},
             Euros:{available:0,debt:0,net:0}
           },
+          totalAvailablePesos:0,
+          exchangeRates:{Dolares:0,Euros:0},
           accounts:[],
           oca:{currency:"Pesos",outstanding:0,months:[]},
           recent:[],movements:0,updatedAt:new Date().toISOString(),dryRun:true
         });
       }
       const result = await callAppsScript({action:"personalSummary"});
+      const hasConvertedTotal = result.totalAvailablePesos !== null && result.totalAvailablePesos !== undefined && result.totalAvailablePesos !== "" && Number.isFinite(Number(result.totalAvailablePesos));
       return reply(response, 200, {
         ok:true,
+        version:result.version || null,
         currencies:result.currencies || {},
+        totalAvailablePesos:hasConvertedTotal ? Number(result.totalAvailablePesos) : null,
+        exchangeRates:result.exchangeRates || {},
         accounts:Array.isArray(result.accounts) ? result.accounts : [],
         oca:result.oca || {currency:"Pesos",outstanding:0,months:[]},
         recent:Array.isArray(result.recent) ? result.recent : [],

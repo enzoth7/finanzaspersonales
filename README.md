@@ -68,7 +68,9 @@ Todo este paso debe hacerse con enzothome1@gmail.com.
    - Acceso: cualquiera.
 7. Copiar la URL terminada en /exec.
 
-Al abrir esa URL en el navegador debe aparecer una respuesta JSON con `"ok":true`, el ID de esta planilla y la versión `2026-09-01-v11`.
+Al abrir esa URL en el navegador debe aparecer una respuesta JSON con `"ok":true`, el ID de esta planilla y la versión `2026-09-01-v14`.
+
+Cada envío manual incluye un identificador que se conserva si la confirmación demora o falla. Apps Script recuerda los últimos 100 envíos: al reintentar, devuelve la fila ya creada en lugar de agregar un duplicado.
 
 Después de cambiar `Code.gs`, guardar el proyecto y crear una nueva versión de la implementación web. El lector horario de Gmail usa el código guardado, pero la web necesita que la URL `/exec` apunte a la nueva implementación para disponer también de la lectura de saldos.
 

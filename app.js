@@ -32,6 +32,9 @@ const ocaUpdated = document.querySelector("#oca-updated");
 const refreshOca = document.querySelector("#refresh-oca");
 let balanceRequest = null;
 let ocaRequest = null;
+const PENDING_EXPENSE_KEY = "finanzas-pending-expense-v1";
+const PENDING_EXPENSE_TTL = 24 * 60 * 60 * 1000;
+let volatilePendingExpense = null;
 
 const ACCOUNT_LOGOS = Object.freeze({
   efectivo:"/public/efectivo.webp",
@@ -99,6 +102,54 @@ async function readApiResult(response, feature) {
     }
     throw new Error("No se pudo leer " + feature + ". Actualizá la aplicación y volvé a intentar.");
   }
+}
+
+function createSubmissionId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2) + "-" + Math.random().toString(36).slice(2);
+}
+
+function expenseSignature(data) {
+  return JSON.stringify({
+    date:data.date,
+    type:data.type,
+    amount:String(data.amount),
+    category:data.category,
+    description:data.description || ""
+  });
+}
+
+function getSubmissionId(data) {
+  const signature = expenseSignature(data);
+  if (volatilePendingExpense?.signature === signature && Date.now() - volatilePendingExpense.createdAt < PENDING_EXPENSE_TTL) {
+    return volatilePendingExpense.id;
+  }
+  try {
+    const pending = JSON.parse(localStorage.getItem(PENDING_EXPENSE_KEY) || "null");
+    if (pending?.signature === signature && Date.now() - Number(pending.createdAt) < PENDING_EXPENSE_TTL) {
+      volatilePendingExpense = pending;
+      return pending.id;
+    }
+  } catch {
+    // Si el almacenamiento del navegador no está disponible, el envío sigue funcionando.
+  }
+
+  const pending = {id:createSubmissionId(),signature,createdAt:Date.now()};
+  volatilePendingExpense = pending;
+  try {
+    localStorage.setItem(PENDING_EXPENSE_KEY, JSON.stringify(pending));
+  } catch {
+    // El identificador todavía protege los reintentos mientras esta página permanezca abierta.
+  }
+  return pending.id;
+}
+
+function clearPendingExpense(submissionId) {
+  if (volatilePendingExpense?.id === submissionId) volatilePendingExpense = null;
+  try {
+    const pending = JSON.parse(localStorage.getItem(PENDING_EXPENSE_KEY) || "null");
+    if (pending?.id === submissionId) localStorage.removeItem(PENDING_EXPENSE_KEY);
+  } catch {}
 }
 
 function accountKey(value) {
@@ -326,6 +377,7 @@ form.addEventListener("submit", async (event) => {
 
   const data = Object.fromEntries(new FormData(form).entries());
   data.account = "Efectivo";
+  const submissionId = getSubmissionId(data);
 
   submitButton.disabled = true;
   submitButton.querySelector("span").textContent = "Guardando…";
@@ -334,16 +386,24 @@ form.addEventListener("submit", async (event) => {
     const response = await fetch("/api/gastos", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(data)
+      body:JSON.stringify({...data,submissionId})
     });
-    const result = await response.json();
+    let result;
+    try {
+      result = await readApiResult(response, "la confirmación del movimiento");
+    } catch {
+      throw new Error("No pudimos confirmar el guardado. No vuelvas a cargar el movimiento: esperá unos segundos y presioná Guardar otra vez; el sistema evitará duplicarlo.");
+    }
     if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo guardar.");
 
-    successMessage.textContent = result.dryRun
+    successMessage.textContent = result.duplicate
+      ? "Este movimiento ya estaba guardado. No se agregó otra copia."
+      : result.dryRun
       ? "Formulario validado. Falta conectar Google Apps Script para escribir en la planilla."
       : "Movimiento guardado correctamente en la planilla.";
     successMessage.hidden = false;
     balanceUpdated.textContent = "";
+    clearPendingExpense(submissionId);
 
     const selectedType = form.elements.type.value;
     const selectedCategory = form.elements.category.value;

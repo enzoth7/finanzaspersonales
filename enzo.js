@@ -24,9 +24,10 @@ const saveError = document.querySelector("#save-error");
 const saveSuccess = document.querySelector("#save-success");
 const refreshPersonal = document.querySelector("#refresh-personal");
 const personalLoading = document.querySelector("#personal-loading");
+const personalTotalCard = document.querySelector("#personal-total-card");
+const personalTotal = document.querySelector("#personal-total");
+const personalTotalNote = document.querySelector("#personal-total-note");
 const currencySummary = document.querySelector("#currency-summary");
-const personalAccountsCard = document.querySelector("#personal-accounts-card");
-const personalAccountList = document.querySelector("#personal-account-list");
 const recentCard = document.querySelector("#recent-card");
 const recentList = document.querySelector("#recent-list");
 const personalError = document.querySelector("#personal-error");
@@ -307,47 +308,15 @@ function formatMonth(dateText) {
 
 function createCurrencyCard(currency, values) {
   const card = document.createElement("article");
-  card.className = "currency-card";
+  card.className = `currency-card currency-${currency.toLowerCase()}`;
   card.innerHTML = `
     <div class="currency-card-header">
       <h3>${CURRENCY_INFO[currency].label}</h3>
       <span class="currency-code">${CURRENCY_INFO[currency].code}</span>
     </div>
-    <strong class="currency-net">${formatMoney(values.net, currency)}</strong>
-    <span class="currency-net-label">Disponible menos deudas</span>
-    <div class="currency-breakdown">
-      <div class="currency-metric"><span>En cuentas</span><strong>${formatMoney(values.available, currency)}</strong></div>
-      <div class="currency-metric debt"><span>Deuda con mamá</span><strong>${formatMoney(values.debt, currency)}</strong></div>
-    </div>`;
+    <strong class="currency-balance">${formatMoney(values.available, currency)}</strong>
+    <span class="currency-balance-label">Disponible</span>`;
   return card;
-}
-
-function renderPersonalAccounts(accounts) {
-  if (!accounts.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "Todavía no hay saldos por cuenta.";
-    personalAccountList.replaceChildren(empty);
-    return;
-  }
-  personalAccountList.replaceChildren(...accounts.map((item) => {
-    const row = document.createElement("div");
-    row.className = "personal-account-row";
-    const copy = document.createElement("div");
-    const name = document.createElement("div");
-    name.className = "personal-account-name";
-    name.textContent = item.account;
-    const meta = document.createElement("div");
-    meta.className = "personal-account-meta";
-    meta.textContent = CURRENCY_INFO[item.currency]?.label || item.currency;
-    copy.append(name, meta);
-    const amount = document.createElement("strong");
-    amount.className = "personal-account-amount";
-    amount.textContent = formatMoney(item.amount, item.currency);
-    if (Number(item.amount) < 0) amount.classList.add("negative");
-    row.append(copy, amount);
-    return row;
-  }));
 }
 
 function renderRecent(items) {
@@ -408,9 +377,9 @@ async function loadPersonalSummary() {
   if (summaryRequest) return summaryRequest;
   personalError.hidden = true;
   personalLoading.hidden = false;
+  personalTotalCard.hidden = true;
   currencySummary.hidden = true;
   personalOcaCard.hidden = true;
-  personalAccountsCard.hidden = true;
   recentCard.hidden = true;
   refreshPersonal.disabled = true;
   summaryPanel.setAttribute("aria-busy", "true");
@@ -420,13 +389,17 @@ async function loadPersonalSummary() {
       const result = await readApiResult(response);
       if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo cargar tu estado.");
       const currencies = result.currencies || {};
+      const hasConvertedTotal = result.totalAvailablePesos !== null && result.totalAvailablePesos !== undefined && Number.isFinite(Number(result.totalAvailablePesos));
+      personalTotal.textContent = hasConvertedTotal ? formatMoney(result.totalAvailablePesos, "Pesos") : "—";
+      personalTotalNote.textContent = hasConvertedTotal
+        ? "Pesos, dólares y euros convertidos a pesos uruguayos."
+        : "Falta publicar la versión nueva de Google Apps Script para calcular la conversión.";
       currencySummary.replaceChildren(...PERSONAL_CURRENCIES.map((currency) => createCurrencyCard(currency, currencies[currency] || {available:0,debt:0,net:0})));
-      renderPersonalAccounts(Array.isArray(result.accounts) ? result.accounts : []);
       renderPersonalOca(result.oca || {});
       renderRecent(Array.isArray(result.recent) ? result.recent : []);
+      personalTotalCard.hidden = false;
       currencySummary.hidden = false;
       personalOcaCard.hidden = false;
-      personalAccountsCard.hidden = false;
       recentCard.hidden = false;
       personalUpdated.textContent = formatUpdatedAt(result.updatedAt);
     } catch (error) {
@@ -535,7 +508,7 @@ function activateView(view) {
   Object.entries(views).forEach(([name, panel]) => { panel.hidden = name !== view; });
   title.textContent = view === "summary" ? "Mi estado financiero" : view === "credit" ? "Tarjeta OCA" : "Importar gastos";
   subtitle.textContent = view === "summary"
-    ? "Disponible, deudas y próximos pagos en un vistazo."
+    ? "Tu dinero disponible y próximos pagos en un vistazo."
     : view === "credit"
       ? "Compras en cuotas y suscripciones en un mismo lugar."
       : "Capturas a movimientos, sin registrar uno por uno.";
