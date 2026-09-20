@@ -146,6 +146,14 @@ test("descompone un pago confirmado de Redpagos en servicios y devoluciones", ()
   assert.equal(result.expenses.filter(item => item.category === "Dev Impuestos").length, 3);
 });
 
+test("genera un identificador distinto para cada movimiento del mismo correo", () => {
+  const first = context.emailSubmissionId_("1a09556644678e91", 0);
+  const second = context.emailSubmissionId_("1a09556644678e91", 1);
+  assert.equal(first, "mail_1a09556644678e91_0");
+  assert.equal(second, "mail_1a09556644678e91_1");
+  assert.notEqual(first, second);
+});
+
 test("ignora avisos y pagos todavía no confirmados de Redpagos", () => {
   const pending = context.parseTransactionEmail_({
     from:"noreply@redpagos.com.uy",

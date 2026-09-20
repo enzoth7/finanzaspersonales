@@ -1,5 +1,5 @@
 const CONFIG = Object.freeze({
-  VERSION: "2026-09-01-v14",
+  VERSION: "2026-09-01-v15",
   SPREADSHEET_ID: "1QfWNrNWRQsFpWZNnYiItdRDop_d5Hw9CgoNC1s7wMxE",
   SHEET_GID: 1406094759,
   CONFIG_SHEET_GID: 900241103,
@@ -523,10 +523,20 @@ function expenseFingerprint_(expense) {
 function readRecentExpenseSubmissionIds_(properties) {
   try {
     const value = JSON.parse(properties.getProperty("RECENT_EXPENSE_SUBMISSION_IDS") || "[]");
-    return Array.isArray(value) ? value : [];
+    return Array.isArray(value) ? value.filter(function(id) { return typeof id === "string" && id !== ""; }) : [];
   } catch (error) {
     return [];
   }
+}
+
+function rememberExpenseSubmission_(properties, submissionId, saved) {
+  properties.setProperty("EXPENSE_SUBMISSION_" + submissionId, JSON.stringify(saved));
+  const recentIds = readRecentExpenseSubmissionIds_(properties).filter(function(id) { return id !== submissionId; });
+  recentIds.unshift(submissionId);
+  recentIds.slice(100).forEach(function(id) {
+    properties.deleteProperty("EXPENSE_SUBMISSION_" + id);
+  });
+  properties.setProperty("RECENT_EXPENSE_SUBMISSION_IDS", JSON.stringify(recentIds.slice(0, 100)));
 }
 
 function appendExpense_(expense, submissionId) {
@@ -543,6 +553,16 @@ function appendExpense_(expense, submissionId) {
         throw new Error("El identificador ya fue usado para otro movimiento.");
       }
       return {row:previous.row,sheet:previous.sheet,duplicate:true};
+    }
+
+    // v14 guardó los correos sin ID bajo la clave "undefined". Si coincide con
+    // este movimiento, se adopta la fila ya escrita para no volver a insertarla.
+    const legacyText = properties.getProperty("EXPENSE_SUBMISSION_undefined");
+    const legacy = legacyText ? JSON.parse(legacyText) : null;
+    if (legacy && legacy.fingerprint === fingerprint) {
+      rememberExpenseSubmission_(properties, submissionId, legacy);
+      properties.deleteProperty("EXPENSE_SUBMISSION_undefined");
+      return {row:legacy.row,sheet:legacy.sheet,duplicate:true};
     }
 
     const sheet = getTargetSheet_(expense.date);
@@ -567,14 +587,7 @@ function appendExpense_(expense, submissionId) {
     target.getCell(1, 1).setNumberFormat("dd/mm/yyyy");
     SpreadsheetApp.flush();
     const saved = {fingerprint:fingerprint,row:row,sheet:sheet.getName(),savedAt:Date.now()};
-    properties.setProperty(propertyKey, JSON.stringify(saved));
-
-    const recentIds = readRecentExpenseSubmissionIds_(properties).filter(function(id) { return id !== submissionId; });
-    recentIds.unshift(submissionId);
-    recentIds.slice(100).forEach(function(id) {
-      properties.deleteProperty("EXPENSE_SUBMISSION_" + id);
-    });
-    properties.setProperty("RECENT_EXPENSE_SUBMISSION_IDS", JSON.stringify(recentIds.slice(0, 100)));
+    rememberExpenseSubmission_(properties, submissionId, saved);
     return {row:row,sheet:sheet.getName(),duplicate:false};
   } finally {
     lock.releaseLock();
@@ -702,8 +715,14 @@ function processExpenseEmails() {
   const rules = loadConfigRules_();
   const processedLabel = getOrCreateLabel_(CONFIG.PROCESSED_LABEL);
   const errorLabel = getOrCreateLabel_(CONFIG.ERROR_LABEL);
-  const query = getEmailQuery_() + " after:2026/08/31 -label:" + CONFIG.PROCESSED_LABEL;
-  const threads = GmailApp.search(query, 0, 50);
+  const baseQuery = getEmailQuery_() + " after:2026/08/31";
+  const threadById = {};
+  GmailApp.search(baseQuery + " -label:" + CONFIG.PROCESSED_LABEL, 0, 50)
+    .concat(GmailApp.search(baseQuery + " label:" + CONFIG.ERROR_LABEL, 0, 50))
+    .forEach(function(thread) {
+      threadById[thread.getId()] = thread;
+    });
+  const threads = Object.keys(threadById).map(function(threadId) { return threadById[threadId]; });
 
   threads.forEach(function(thread) {
     let failed = false;
@@ -717,8 +736,10 @@ function processExpenseEmails() {
           body:message.getPlainBody(),
           receivedAt:message.getDate()
         }, rules);
-        result.expenses.forEach(function(expense) {
-          if (expense.date >= CONFIG.START_DATE) appendExpense_(expense);
+        result.expenses.forEach(function(expense, expenseIndex) {
+          if (expense.date >= CONFIG.START_DATE) {
+            appendExpense_(expense, emailSubmissionId_(message.getId(), expenseIndex));
+          }
         });
         markEmailProcessed_(message.getId());
       } catch (error) {
@@ -728,11 +749,17 @@ function processExpenseEmails() {
     });
     if (failed) {
       thread.addLabel(errorLabel);
+      thread.removeLabel(processedLabel);
     } else {
       thread.addLabel(processedLabel);
       thread.removeLabel(errorLabel);
     }
   });
+}
+
+function emailSubmissionId_(messageId, expenseIndex) {
+  const safeMessageId = cleanText_(messageId, 80).replace(/[^a-zA-Z0-9_-]/g, "_");
+  return "mail_" + safeMessageId + "_" + Number(expenseIndex || 0);
 }
 
 function previewExpenseEmails() {
