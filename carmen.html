@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=7">
+  <link rel="stylesheet" href="/styles.css?v=8">
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -32,6 +32,10 @@
       <button id="balance-tab" class="app-tab" type="button" role="tab" aria-selected="false" aria-controls="balance-panel" data-view="balance">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7H4a2 2 0 0 1 0-4h13v4M4 7v12a2 2 0 0 0 2 2h14V7H4Z"/><path d="M16 14h.01"/></svg>
         <span>Disponible</span>
+      </button>
+      <button id="categories-tab" class="app-tab" type="button" role="tab" aria-selected="false" aria-controls="categories-panel" data-view="categories">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+        <span>Gastos</span>
       </button>
       <button id="oca-tab" class="app-tab" type="button" role="tab" aria-selected="false" aria-controls="oca-panel" data-view="oca">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></svg>
@@ -74,6 +78,15 @@
         </label>
 
         <label class="field">
+          <span>Medio <small>obligatorio</small></span>
+          <select id="account" name="account" required>
+            <option value="Efectivo">Efectivo</option>
+            <option value="Mercado Pago">Mercado Pago</option>
+            <option value="Prex">Prex</option>
+          </select>
+        </label>
+
+        <label class="field">
           <span>Descripción <small>opcional</small></span>
           <textarea id="description" name="description" rows="3" maxlength="300" placeholder="Ej. Supermercado del barrio"></textarea>
         </label>
@@ -86,6 +99,47 @@
           <span>Guardar en la planilla</span>
         </button>
       </form>
+    </section>
+
+    <section id="categories-panel" class="view-panel" role="tabpanel" aria-labelledby="categories-tab" hidden>
+      <div class="category-summary-card">
+        <div class="category-summary-heading">
+          <div>
+            <p class="category-eyebrow">Gastado en el mes</p>
+            <p id="category-period-label" class="category-summary-help">Mes actual</p>
+          </div>
+          <svg class="category-summary-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+        </div>
+        <strong id="category-total" class="category-total" aria-live="polite">$ —</strong>
+        <p id="category-movement-count" class="category-movement-count"></p>
+      </div>
+
+      <div class="categories-section">
+        <div class="section-heading category-heading">
+          <div>
+            <h2>Por categoría</h2>
+            <label class="period-field" for="category-period">
+              <span>Mes</span>
+              <select id="category-period" aria-label="Mes del resumen de gastos"></select>
+            </label>
+          </div>
+          <button id="refresh-categories" class="refresh-button" type="button" aria-label="Actualizar gastos por categoría">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
+          </button>
+        </div>
+
+        <div id="categories-loading" class="balance-loading" aria-hidden="true">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+        <div id="category-list" class="category-list"></div>
+        <p id="categories-empty" class="category-empty" hidden>No hay egresos registrados para este mes.</p>
+        <p id="categories-error" class="message error" role="alert" hidden></p>
+        <p id="categories-updated" class="balance-updated" role="status"></p>
+      </div>
+
+      <p class="balance-note">Se cuentan únicamente los egresos y se agrupan según la categoría guardada en la planilla.</p>
     </section>
 
     <section id="oca-panel" class="view-panel" role="tabpanel" aria-labelledby="oca-tab" hidden>
@@ -192,6 +246,6 @@
       Se guarda directamente en la hoja de gastos familiares existente.
     </p>
   </main>
-  <script type="module" src="/app.js?v=13"></script>
+  <script type="module" src="/app.js?v=14"></script>
 </body>
 </html>

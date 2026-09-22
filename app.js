@@ -4,6 +4,7 @@ const form = document.querySelector("#expense-form");
 const amount = document.querySelector("#amount");
 const dateInput = document.querySelector("#date");
 const categoryInput = document.querySelector("#category");
+const accountInput = document.querySelector("#account");
 const submitButton = document.querySelector("#submit-button");
 const errorMessage = document.querySelector("#form-error");
 const successMessage = document.querySelector("#form-success");
@@ -12,6 +13,7 @@ const tabs = Array.from(document.querySelectorAll(".app-tab"));
 const registerPanel = document.querySelector("#register-panel");
 const balancePanel = document.querySelector("#balance-panel");
 const ocaPanel = document.querySelector("#oca-panel");
+const categoriesPanel = document.querySelector("#categories-panel");
 const balanceTotal = document.querySelector("#balance-total");
 const accountList = document.querySelector("#account-list");
 const balanceLoading = document.querySelector("#balance-loading");
@@ -30,8 +32,19 @@ const ocaEmpty = document.querySelector("#oca-empty");
 const ocaError = document.querySelector("#oca-error");
 const ocaUpdated = document.querySelector("#oca-updated");
 const refreshOca = document.querySelector("#refresh-oca");
+const categoryTotal = document.querySelector("#category-total");
+const categoryPeriodLabel = document.querySelector("#category-period-label");
+const categoryMovementCount = document.querySelector("#category-movement-count");
+const categoryPeriod = document.querySelector("#category-period");
+const categoryList = document.querySelector("#category-list");
+const categoriesLoading = document.querySelector("#categories-loading");
+const categoriesEmpty = document.querySelector("#categories-empty");
+const categoriesError = document.querySelector("#categories-error");
+const categoriesUpdated = document.querySelector("#categories-updated");
+const refreshCategories = document.querySelector("#refresh-categories");
 let balanceRequest = null;
 let ocaRequest = null;
+let categoryRequest = null;
 const PENDING_EXPENSE_KEY = "finanzas-pending-expense-v1";
 const PENDING_EXPENSE_TTL = 24 * 60 * 60 * 1000;
 let volatilePendingExpense = null;
@@ -115,6 +128,7 @@ function expenseSignature(data) {
     type:data.type,
     amount:String(data.amount),
     category:data.category,
+    account:data.account || "Efectivo",
     description:data.description || ""
   });
 }
@@ -317,22 +331,132 @@ async function loadOca() {
   return ocaRequest;
 }
 
+function movementCountText(value) {
+  const count = Number(value) || 0;
+  return count === 1 ? "1 movimiento" : count + " movimientos";
+}
+
+function renderCategoryPeriods(periods, selectedPeriod, selectedLabel) {
+  const available = Array.isArray(periods) ? [...periods] : [];
+  if (selectedPeriod && !available.some((item) => item.period === selectedPeriod)) {
+    available.unshift({period:selectedPeriod,label:selectedLabel || selectedPeriod});
+  }
+  categoryPeriod.replaceChildren(...available.map((item) => {
+    const option = document.createElement("option");
+    option.value = item.period;
+    option.textContent = item.label;
+    return option;
+  }));
+  if (selectedPeriod) categoryPeriod.value = selectedPeriod;
+  categoryPeriod.disabled = available.length < 2;
+}
+
+function renderCategories(categories) {
+  const largestAmount = categories.reduce((maximum, item) => Math.max(maximum, Number(item.amount) || 0), 0);
+  categoryList.replaceChildren(...categories.map((item) => {
+    const row = document.createElement("div");
+    row.className = "category-item";
+
+    const heading = document.createElement("div");
+    heading.className = "category-item-heading";
+    const name = document.createElement("span");
+    name.className = "category-name";
+    name.textContent = item.category;
+    const value = document.createElement("strong");
+    value.className = "category-amount";
+    value.textContent = formatMoney(item.amount);
+    heading.append(name, value);
+
+    const bar = document.createElement("div");
+    bar.className = "category-bar";
+    bar.setAttribute("aria-hidden", "true");
+    const fill = document.createElement("span");
+    fill.className = "category-bar-fill";
+    const percentage = Math.max(0, Math.min(100, Number(item.percentage) || 0));
+    const comparisonWidth = largestAmount > 0 ? ((Number(item.amount) || 0) / largestAmount) * 100 : 0;
+    fill.style.width = comparisonWidth + "%";
+    bar.append(fill);
+
+    const meta = document.createElement("div");
+    meta.className = "category-item-meta";
+    const count = document.createElement("span");
+    count.textContent = movementCountText(item.movements);
+    const share = document.createElement("span");
+    share.className = "category-percentage";
+    share.textContent = new Intl.NumberFormat("es-UY", {maximumFractionDigits:1}).format(percentage) + "%";
+    meta.append(count, share);
+
+    row.append(heading, bar, meta);
+    return row;
+  }));
+}
+
+async function loadCategories(requestedPeriod = categoryPeriod.value) {
+  if (categoryRequest) return categoryRequest;
+  categoriesError.hidden = true;
+  categoriesEmpty.hidden = true;
+  categoriesLoading.hidden = false;
+  categoryList.hidden = true;
+  refreshCategories.disabled = true;
+  categoryPeriod.disabled = true;
+  categoriesPanel.setAttribute("aria-busy", "true");
+
+  categoryRequest = (async () => {
+    try {
+      const search = requestedPeriod ? "?period=" + encodeURIComponent(requestedPeriod) : "";
+      const response = await fetch("/api/categorias" + search, {headers:{"Accept":"application/json"}});
+      const result = await readApiResult(response, "los gastos por categoría");
+      if (!response.ok || !result.ok) throw new Error(result.error || "No se pudieron cargar los gastos por categoría.");
+
+      const categories = Array.isArray(result.categories) ? result.categories : [];
+      categoryTotal.textContent = formatMoney(result.total);
+      categoryPeriodLabel.textContent = result.periodLabel || "Mes seleccionado";
+      categoryMovementCount.textContent = movementCountText(result.movements);
+      renderCategoryPeriods(result.availablePeriods, result.period, result.periodLabel);
+      renderCategories(categories);
+      categoryList.hidden = categories.length === 0;
+      categoriesEmpty.hidden = categories.length !== 0;
+      categoriesUpdated.textContent = formatUpdatedAt(result.updatedAt);
+    } catch (error) {
+      categoriesError.textContent = error instanceof Error ? error.message : "No se pudieron cargar los gastos por categoría.";
+      categoriesError.hidden = false;
+      categoriesUpdated.textContent = "";
+    } finally {
+      categoriesLoading.hidden = true;
+      refreshCategories.disabled = false;
+      if (categoryPeriod.options.length > 1) categoryPeriod.disabled = false;
+      categoriesPanel.removeAttribute("aria-busy");
+      categoryRequest = null;
+    }
+  })();
+  return categoryRequest;
+}
+
 function showView(view, updateHash = true) {
   const showBalance = view === "balance";
   const showOca = view === "oca";
-  registerPanel.hidden = showBalance || showOca;
+  const showCategories = view === "categories";
+  registerPanel.hidden = showBalance || showOca || showCategories;
   balancePanel.hidden = !showBalance;
   ocaPanel.hidden = !showOca;
-  registerFootnote.hidden = showBalance || showOca;
-  pageTitle.textContent = showBalance ? "Dinero disponible" : showOca ? "Estado de OCA" : "Registrar movimiento";
+  categoriesPanel.hidden = !showCategories;
+  registerFootnote.hidden = showBalance || showOca || showCategories;
+  pageTitle.textContent = showBalance
+    ? "Dinero disponible"
+    : showCategories
+    ? "Gastos por categoría"
+    : showOca
+    ? "Estado de OCA"
+    : "Registrar movimiento";
   tabs.forEach((tab) => {
     const selected = tab.dataset.view === view;
     tab.classList.toggle("active", selected);
     tab.setAttribute("aria-selected", String(selected));
     tab.tabIndex = selected ? 0 : -1;
   });
-  if (updateHash) history.replaceState(null, "", showBalance ? "#disponible" : showOca ? "#oca" : "#registrar");
+  if (updateHash) history.replaceState(null, "", showBalance ? "#disponible" : showCategories ? "#gastos" : showOca ? "#oca" : "#registrar");
   if (showBalance) loadBalances();
+  if (showCategories) loadCategories();
   if (showOca) loadOca();
 }
 
@@ -349,8 +473,10 @@ tabs.forEach((tab, index) => {
 });
 
 refreshBalances.addEventListener("click", loadBalances);
+refreshCategories.addEventListener("click", () => loadCategories(categoryPeriod.value));
+categoryPeriod.addEventListener("change", () => loadCategories(categoryPeriod.value));
 refreshOca.addEventListener("click", loadOca);
-showView(location.hash === "#disponible" ? "balance" : location.hash === "#oca" ? "oca" : "register", false);
+showView(location.hash === "#disponible" ? "balance" : location.hash === "#gastos" ? "categories" : location.hash === "#oca" ? "oca" : "register", false);
 
 function setCategories(type, preferredCategory = "") {
   const categories = CATEGORIES_BY_TYPE[type] || [];
@@ -376,7 +502,6 @@ form.addEventListener("submit", async (event) => {
   if (!form.reportValidity()) return;
 
   const data = Object.fromEntries(new FormData(form).entries());
-  data.account = "Efectivo";
   const submissionId = getSubmissionId(data);
 
   submitButton.disabled = true;
@@ -403,13 +528,16 @@ form.addEventListener("submit", async (event) => {
       : "Movimiento guardado correctamente en la planilla.";
     successMessage.hidden = false;
     balanceUpdated.textContent = "";
+    categoriesUpdated.textContent = "";
     clearPendingExpense(submissionId);
 
     const selectedType = form.elements.type.value;
     const selectedCategory = form.elements.category.value;
+    const selectedAccount = form.elements.account.value;
     form.reset();
     form.elements.type.value = selectedType;
     setCategories(selectedType, selectedCategory);
+    accountInput.value = selectedAccount;
     setDefaultDate(true);
     amount.focus();
   } catch (error) {

@@ -11,7 +11,7 @@ test("acepta una fila compatible con la hoja existente", () => {
   });
   assert.equal(expense.amount, 450.5);
   assert.equal(expense.category, "Comida");
-  assert.equal(expense.account, "");
+  assert.equal(expense.account, "Efectivo");
   assert.equal(expense.description, "");
 });
 
@@ -42,8 +42,17 @@ test("acepta Efectivo y una descripción opcional", () => {
   assert.equal(expense.description, "Compra del día");
 });
 
-test("rechaza cuentas distintas de Efectivo", () => {
-  assert.throws(() => validateExpense({
+test("acepta Mercado Pago y Prex como medios manuales", () => {
+  assert.equal(validateExpense({
     date:"2026-09-01",type:"Egreso",amount:"25",category:"Comida",account:"Prex"
-  }), /Efectivo/);
+  }).account, "Prex");
+  assert.equal(validateExpense({
+    date:"2026-09-01",type:"Ingreso",amount:"25",category:"Ventas",account:"Mercado Pago"
+  }).account, "Mercado Pago");
+});
+
+test("rechaza medios fuera del formulario familiar", () => {
+  assert.throws(() => validateExpense({
+    date:"2026-09-01",type:"Egreso",amount:"25",category:"Comida",account:"MiDinero"
+  }), /Mercado Pago o Prex/);
 });

@@ -104,7 +104,7 @@ h1 {
 
 .app-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   margin: 0 0 14px;
   padding: 5px;
@@ -139,7 +139,8 @@ h1 {
 
 .view-panel { min-width: 0; }
 
-#balance-panel {
+#balance-panel,
+#categories-panel {
   display: grid;
   gap: 16px;
 }
@@ -151,6 +152,8 @@ h1 {
 
 .balance-card,
 .accounts-section,
+.category-summary-card,
+.categories-section,
 .oca-summary-card,
 .oca-details-card,
 .oca-forecast-card {
@@ -167,6 +170,73 @@ h1 {
   border: 0;
   box-shadow: 0 16px 34px rgb(7 89 182 / 22%);
 }
+
+.category-summary-card {
+  color: #ffffff;
+  background: linear-gradient(145deg, #7c3aed, #5b21b6);
+  border: 0;
+  box-shadow: 0 16px 34px rgb(91 33 182 / 22%);
+}
+
+.category-summary-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.category-eyebrow { margin: 0; font-weight: 800; }
+.category-summary-help { margin: 2px 0 0; color: #ede9fe; font-size: 14px; }
+.category-summary-icon { width: 30px; height: 30px; flex: 0 0 30px; color: #ddd6fe; }
+.category-total {
+  display: block;
+  margin-top: 22px;
+  font: 700 clamp(36px, 12vw, 54px)/1.05 Lexend, system-ui, sans-serif;
+  letter-spacing: -.045em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.category-movement-count { margin: 8px 0 0; color: #ede9fe; font-size: 14px; font-weight: 700; }
+
+.categories-section {
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+  box-shadow: none;
+}
+
+.period-field { display: block; margin-top: 14px; }
+.period-field > span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.period-field select {
+  min-width: 180px;
+  min-height: 46px;
+  padding: 8px 36px 8px 11px;
+  color: var(--foreground);
+  background: #ffffff;
+  border: 1px solid #c4b5fd;
+  border-radius: 11px;
+  outline: none;
+}
+.period-field select:focus { border-color: #7c3aed; box-shadow: 0 0 0 4px rgb(124 58 237 / 18%); }
+.category-list { display: grid; gap: 18px; margin-top: 20px; }
+.category-item { min-width: 0; }
+.category-item-heading,
+.category-item-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.category-name { color: var(--label); font-weight: 800; overflow-wrap: anywhere; }
+.category-amount { flex: 0 0 auto; font: 700 17px/1.25 Lexend, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.category-bar {
+  height: 11px;
+  margin-top: 8px;
+  overflow: hidden;
+  background: #e9e5f6;
+  border-radius: 999px;
+}
+.category-bar-fill { display: block; height: 100%; background: #7c3aed; border-radius: inherit; }
+.category-item:nth-child(4n + 2) .category-bar-fill { background: #2563eb; }
+.category-item:nth-child(4n + 3) .category-bar-fill { background: #059669; }
+.category-item:nth-child(4n + 4) .category-bar-fill { background: #d97706; }
+.category-item-meta { margin-top: 5px; color: var(--muted); font-size: 13px; }
+.category-percentage { font-weight: 800; }
+.category-empty { margin: 22px 0 0; color: var(--muted); text-align: center; }
 
 .oca-summary-heading {
   display: flex;
@@ -559,15 +629,16 @@ legend,
   .mark { width: 48px; height: 48px; flex-basis: 48px; border-radius: 14px; }
   h1 { font-size: clamp(24px, 7vw, 29px); }
   .card { padding: 19px 16px 22px; border-radius: 17px; }
-  .balance-card, .accounts-section, .oca-summary-card, .oca-details-card, .oca-forecast-card { padding: 20px 18px; border-radius: 18px; }
-  .app-tab { gap: 5px; padding-inline: 5px; font-size: 15px; }
-  .app-tab svg { width: 19px; height: 19px; }
+  .balance-card, .accounts-section, .category-summary-card, .categories-section, .oca-summary-card, .oca-details-card, .oca-forecast-card { padding: 20px 18px; border-radius: 18px; }
+  .app-tab { flex-direction: column; gap: 2px; padding: 7px 3px; font-size: 13px; line-height: 1.15; }
+  .app-tab svg { width: 18px; height: 18px; }
   .balance-total { font-size: clamp(36px, 12vw, 48px); }
   .section-heading p { max-width: 220px; }
   .account-row { gap: 10px; }
   .account-identity { gap: 10px; }
   .account-amount { font-size: 18px; }
   .oca-brand-logo { width: 80px; height: 40px; }
+  .period-field select { min-width: 160px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

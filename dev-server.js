@@ -4,6 +4,7 @@ import { extname, join, normalize } from "node:path";
 import process from "node:process";
 import handler from "./api/gastos.js";
 import balancesHandler from "./api/saldos.js";
+import categoriesHandler from "./api/categorias.js";
 import ocaHandler from "./api/oca.js";
 import personalHandler from "./api/personal.js";
 
@@ -98,6 +99,12 @@ const server = createServer(async (request, response) => {
     if (url.pathname === "/api/saldos") {
       addVercelResponseHelpers(response);
       await balancesHandler(request, response);
+      return;
+    }
+    if (url.pathname === "/api/categorias") {
+      addVercelResponseHelpers(response);
+      request.query = Object.fromEntries(url.searchParams);
+      await categoriesHandler(request, response);
       return;
     }
     if (url.pathname === "/api/oca") {

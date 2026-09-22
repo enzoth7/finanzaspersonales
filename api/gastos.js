@@ -23,7 +23,7 @@ export default async function handler(request, response) {
 
   try {
     const body = typeof request.body === "string" ? JSON.parse(request.body) : request.body || {};
-    const expense = validateExpense({...body, account:"Efectivo"});
+    const expense = validateExpense(body);
     const submissionId = validateSubmissionId(body.submissionId);
     if (process.env.DRY_RUN === "true") {
       return reply(response, 200, {ok:true,dryRun:true,row:null});

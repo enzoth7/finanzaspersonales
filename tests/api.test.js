@@ -38,7 +38,7 @@ test("la función de Vercel no requiere acceso familiar", async () => {
   assert.equal(response.statusCode, 200);
 });
 
-test("la función asigna Efectivo aunque el cliente intente enviar otra cuenta", async () => {
+test("la función acepta Prex como medio seleccionado", async () => {
   process.env.DRY_RUN = "true";
   const request = {
     method:"POST",

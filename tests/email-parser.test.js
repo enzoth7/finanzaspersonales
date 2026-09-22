@@ -261,6 +261,27 @@ test("incluye cuentas adicionales registradas en la planilla", () => {
   ]);
 });
 
+test("agrupa los egresos mensuales por categoría", () => {
+  const result = context.summarizeCategoryRows_([
+    ["2026-09-02","Egreso",1200,"Comida","Efectivo"],
+    ["03/09/2026","Egreso",800,"Comida","Prex"],
+    ["2026-09-04","Egreso",500,"Salud","Mercado Pago"],
+    ["2026-09-05","Ingreso",3000,"Familia","Efectivo"],
+    ["2026-08-31","Egreso",999,"Otros","Efectivo"],
+    ["2026-10-01","Egreso",750,"Factura","Efectivo"]
+  ], "2026-09");
+
+  assert.equal(result.period, "2026-09");
+  assert.equal(result.periodLabel, "Septiembre 2026");
+  assert.equal(result.total, 2500);
+  assert.equal(result.movements, 3);
+  assert.deepEqual(Array.from(result.categories, item => [item.category,item.amount,item.percentage,item.movements]), [
+    ["Comida",2000,80,2],
+    ["Salud",500,20,1]
+  ]);
+  assert.deepEqual(Array.from(result.availablePeriods, item => item.period), ["2026-10","2026-09"]);
+});
+
 test("calcula las cuotas y el próximo pago de OCA", () => {
   const result = context.summarizeOcaRows_([
     ["Lentes giuliano","",8,10,490],

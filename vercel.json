@@ -8,6 +8,9 @@
     "api/saldos.js": {
       "maxDuration": 10
     },
+    "api/categorias.js": {
+      "maxDuration": 10
+    },
     "api/oca.js": {
       "maxDuration": 10
     },

@@ -1,5 +1,5 @@
 const CONFIG = Object.freeze({
-  VERSION: "2026-09-01-v15",
+  VERSION: "2026-09-22-v16",
   SPREADSHEET_ID: "1QfWNrNWRQsFpWZNnYiItdRDop_d5Hw9CgoNC1s7wMxE",
   SHEET_GID: 1406094759,
   CONFIG_SHEET_GID: 900241103,
@@ -37,6 +37,9 @@ function doPost(event) {
     validateSecret_(payload.secret);
     if (payload.action === "balances") {
       return json_(Object.assign({ok:true,version:CONFIG.VERSION}, getAvailableBalances_()));
+    }
+    if (payload.action === "categorySummary") {
+      return json_(Object.assign({ok:true,version:CONFIG.VERSION}, getCategorySummary_(payload.period)));
     }
     if (payload.action === "oca") {
       return json_(Object.assign({ok:true,version:CONFIG.VERSION}, getOcaStatus_()));
@@ -436,6 +439,12 @@ function periodLabel_(period) {
 }
 
 function getAvailableBalances_() {
+  const summary = summarizeBalanceRows_(readFamilyMovementRows_());
+  summary.updatedAt = new Date().toISOString();
+  return summary;
+}
+
+function readFamilyMovementRows_() {
   const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
   const rows = [];
 
@@ -449,9 +458,61 @@ function getAvailableBalances_() {
     });
   });
 
-  const summary = summarizeBalanceRows_(rows);
+  return rows;
+}
+
+function getCategorySummary_(requestedPeriod) {
+  const summary = summarizeCategoryRows_(readFamilyMovementRows_(), requestedPeriod);
   summary.updatedAt = new Date().toISOString();
   return summary;
+}
+
+function summarizeCategoryRows_(rows, requestedPeriod) {
+  const byPeriod = {};
+
+  rows.forEach(function(row) {
+    const date = sheetDateText_(row[0]);
+    const type = cleanText_(row[1], 16);
+    const amount = Number(row[2]);
+    if (!date || date < CONFIG.START_DATE || type !== "Egreso" || !isFinite(amount) || amount <= 0) return;
+
+    const period = date.slice(0, 7);
+    const category = cleanText_(row[3], 80) || "Sin categoría";
+    if (!byPeriod[period]) byPeriod[period] = {total:0,movements:0,categories:{}};
+    if (!byPeriod[period].categories[category]) byPeriod[period].categories[category] = {amount:0,movements:0};
+    byPeriod[period].total += amount;
+    byPeriod[period].movements += 1;
+    byPeriod[period].categories[category].amount += amount;
+    byPeriod[period].categories[category].movements += 1;
+  });
+
+  const availablePeriodKeys = Object.keys(byPeriod).sort().reverse();
+  const currentPeriod = Utilities.formatDate(new Date(), "America/Montevideo", "yyyy-MM");
+  const cleanRequested = /^20\d{2}-(0[1-9]|1[0-2])$/.test(String(requestedPeriod || "")) ? String(requestedPeriod) : "";
+  const period = cleanRequested || (byPeriod[currentPeriod] ? currentPeriod : availablePeriodKeys[0] || currentPeriod);
+  const selected = byPeriod[period] || {total:0,movements:0,categories:{}};
+  const roundedTotal = Math.round(selected.total * 100) / 100;
+  const categories = Object.keys(selected.categories)
+    .map(function(category) {
+      const item = selected.categories[category];
+      const roundedAmount = Math.round(item.amount * 100) / 100;
+      return {
+        category:category,
+        amount:roundedAmount,
+        percentage:roundedTotal > 0 ? Math.round((roundedAmount / roundedTotal) * 1000) / 10 : 0,
+        movements:item.movements
+      };
+    })
+    .sort(function(a, b) { return b.amount - a.amount || a.category.localeCompare(b.category); });
+
+  return {
+    period:period,
+    periodLabel:periodLabel_(period),
+    total:roundedTotal,
+    movements:selected.movements,
+    categories:categories,
+    availablePeriods:availablePeriodKeys.map(function(value) { return {period:value,label:periodLabel_(value)}; })
+  };
 }
 
 function summarizeBalanceRows_(rows) {
@@ -688,7 +749,7 @@ function validateExpense_(input) {
     type: cleanText_(input.type, 16),
     amount: Number(input.amount),
     category: cleanText_(input.category, 80),
-    account: cleanText_(input.account, 80),
+    account: cleanText_(input.account, 80) || "Efectivo",
     description: cleanText_(input.description, 300)
   };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(expense.date)) throw new Error("Fecha inválida.");
