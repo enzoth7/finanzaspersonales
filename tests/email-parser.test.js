@@ -245,6 +245,23 @@ test("calcula el disponible incluyendo un saldo inicial manual", () => {
   ]);
 });
 
+test("calcula el disponible solo con movimientos del periodo solicitado", () => {
+  const result = context.summarizeBalanceRows_([
+    ["2026-09-30","Egreso",8890.27,"Factura","MiDinero"],
+    ["2026-10-01","Ingreso",23573,"Familia","MiDinero"],
+    ["2026-10-02","Egreso",10526.76,"Comida","MiDinero"],
+    ["2026-10-01","Ingreso",1984,"Familia","Efectivo"],
+    ["2026-09-30","Egreso",821,"Comida","Efectivo"]
+  ], "2026-10");
+
+  assert.equal(result.total, 15030.24);
+  assert.equal(result.movements, 3);
+  assert.deepEqual(Array.from(result.accounts, item => [item.account,item.amount]), [
+    ["Efectivo",1984],
+    ["MiDinero",13046.24]
+  ]);
+});
+
 test("incluye cuentas adicionales registradas en la planilla", () => {
   const result = context.summarizeBalanceRows_([
     ["01/09/2026","Ingreso",1000,"Saldo Inicial","Prex"],

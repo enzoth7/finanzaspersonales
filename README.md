@@ -22,20 +22,16 @@ Destino:
 
 ## Finanzas personales de Enzo
 
-La portada `/` permite elegir entre `/enzo` y `/carmen`. La ruta `/enzo` mantiene el flujo personal separado de la carga familiar. Usa la planilla existente `2026-2028 FINANZAS` (`1rPs2YmiHSdpB_m4XDHEz1LFcH1LbWU4TRIWf0InjvKs`) y la pestaña `MOVIMIENTOS`:
+La portada `/` permite elegir entre `/enzo` y `/carmen`. La ruta `/enzo` mantiene el flujo personal separado de la carga familiar y ya no importa capturas ni movimientos.
 
-- `enzo.html`, `enzo.css` y `enzo.js`: importación móvil de lotes generados a partir de capturas y resumen por moneda.
-- `api/personal.js`: valida hasta 100 movimientos por lote y solicita su escritura o resumen a Apps Script.
-- `lib/personal.js`: normaliza fechas, importes, monedas, categorías y cuentas.
-- `docs/gem-gastos-enzo.md`: instrucciones del Gem que transforma capturas en JSON.
+Fuentes existentes:
 
-El resumen no mezcla monedas. Muestra por separado pesos, dólares y euros, con dinero en cuentas, deuda con mamá y disponible neto. Una compra con cuenta `Deuda Mamá` aumenta la deuda; un egreso con categoría `Pago Deuda Mamá` la reduce sin volver a contar la compra.
+- Cajas de Enzo: `2026-01 - 2027-12 CAJA` (`1VPZL31ruHgzx80UW-MPng2Abk1mdERffE0Je6BpeKHg`). El estado actual se calcula desde la pestaña del mes vigente y las cotizaciones se leen de `CONFIG!I20:I21`.
+- Finanzas: `2026-2028 FINANZAS` (`1rPs2YmiHSdpB_m4XDHEz1LFcH1LbWU4TRIWf0InjvKs`). OCA se lee y escribe en la pestaña con gid `1825070646`; la proyección financiera se toma de la fila `RESTO USD` de `FINANZAS VIEWER`.
 
-Los movimientos repetidos se comparan mediante una huella de fecha, tipo, moneda, importe, categoría, cuenta y descripción. Un posible duplicado no se elimina: vuelve a la revisión y puede confirmarse como una compra legítima diferente.
+La app muestra el dinero disponible por moneda y cuenta, los próximos doce meses de OCA y los próximos doce meses de la proyección financiera. El único formulario personal que escribe datos es `Cargar OCA`; las compras en cuotas y suscripciones se guardan directamente en la primera fila libre de `OCA!B6:G32`.
 
-Después de reemplazar `Code.gs`, se debe crear una versión nueva de la implementación web de Apps Script. La pestaña familiar y la pestaña personal usan la misma URL `/exec`, pero escriben en archivos distintos según la acción solicitada.
-
-El formulario muestra categorías distintas según el tipo de movimiento. Los egresos e ingresos se validan también en el servidor para evitar combinaciones incorrectas.
+Después de reemplazar `Code.gs`, se debe crear una versión nueva de la implementación web de Apps Script. La app familiar conserva sus acciones, planilla y comportamiento anteriores.
 
 ## Dinero disponible
 
@@ -69,7 +65,7 @@ Todo este paso debe hacerse con enzothome1@gmail.com.
    - Acceso: cualquiera.
 7. Copiar la URL terminada en /exec.
 
-Al abrir esa URL en el navegador debe aparecer una respuesta JSON con `"ok":true`, el ID de esta planilla y la versión `2026-09-01-v15`.
+Al abrir esa URL en el navegador debe aparecer una respuesta JSON con `"ok":true`, el ID de esta planilla y la versión `2026-10-22-v18`.
 
 Cada envío manual incluye un identificador que se conserva si la confirmación demora o falla. Apps Script recuerda los últimos 100 envíos: al reintentar, devuelve la fila ya creada en lugar de agregar un duplicado.
 
@@ -107,9 +103,3 @@ El lector es determinista: extrae fecha e importe con expresiones regulares y to
 - DRY_RUN: eliminar o establecer en false para producción.
 
 Después se puede importar esta carpeta en Vercel sin cambiar la planilla.
-
-## Control rápido personal y compras OCA
-
-La ruta `/enzo` permite importar movimientos, revisar el estado por moneda y registrar compras o suscripciones de OCA. En `Crédito` se puede elegir entre una compra en cuotas y una suscripción mensual. Las suscripciones se proyectan en cada mes futuro hasta que se quite o modifique su fila en `MOVIMIENTOS`.
-
-La pestaña `DASHBOARD` de la planilla personal contiene desde la fila 68 un control rápido con gasto del mes, disponible, principales rubros y la proyección de OCA de los próximos seis meses. Las compras a crédito cuentan como gasto del mes, pero no reducen el efectivo disponible hasta que se registra el pago real de OCA.

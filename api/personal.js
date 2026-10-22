@@ -1,4 +1,4 @@
-import { validatePersonalMovement } from "../lib/personal.js";
+import { validateOcaEntry } from "../lib/personal.js";
 
 function reply(response, status, payload) {
   response.status(status);
@@ -34,26 +34,33 @@ async function callAppsScript(payload) {
   return result;
 }
 
+function emptySummary() {
+  return {
+    currencies:{
+      Pesos:{available:0,debt:0,net:0},
+      Dolares:{available:0,debt:0,net:0},
+      Euros:{available:0,debt:0,net:0}
+    },
+    totalAvailablePesos:0,
+    exchangeRates:{Dolares:0,Euros:0},
+    accounts:[],
+    oca:{currency:"Pesos",outstanding:0,nextPayment:0,projectedTotal:0,activeItems:0,months:[]},
+    finance:{currency:"Dolares",months:[]},
+    recent:[],
+    movements:0,
+    sourceSheet:null
+  };
+}
+
 export default async function handler(request, response) {
   try {
     if (request.method === "GET") {
       if (process.env.DRY_RUN === "true") {
-        return reply(response, 200, {
-          ok:true,
-          currencies:{
-            Pesos:{available:0,debt:0,net:0},
-            Dolares:{available:0,debt:0,net:0},
-            Euros:{available:0,debt:0,net:0}
-          },
-          totalAvailablePesos:0,
-          exchangeRates:{Dolares:0,Euros:0},
-          accounts:[],
-          oca:{currency:"Pesos",outstanding:0,months:[]},
-          recent:[],movements:0,updatedAt:new Date().toISOString(),dryRun:true
-        });
+        return reply(response, 200, {...emptySummary(),ok:true,updatedAt:new Date().toISOString(),dryRun:true});
       }
       const result = await callAppsScript({action:"personalSummary"});
-      const hasConvertedTotal = result.totalAvailablePesos !== null && result.totalAvailablePesos !== undefined && result.totalAvailablePesos !== "" && Number.isFinite(Number(result.totalAvailablePesos));
+      const hasConvertedTotal = result.totalAvailablePesos !== null && result.totalAvailablePesos !== undefined &&
+        result.totalAvailablePesos !== "" && Number.isFinite(Number(result.totalAvailablePesos));
       return reply(response, 200, {
         ok:true,
         version:result.version || null,
@@ -61,27 +68,28 @@ export default async function handler(request, response) {
         totalAvailablePesos:hasConvertedTotal ? Number(result.totalAvailablePesos) : null,
         exchangeRates:result.exchangeRates || {},
         accounts:Array.isArray(result.accounts) ? result.accounts : [],
-        oca:result.oca || {currency:"Pesos",outstanding:0,months:[]},
+        oca:result.oca || emptySummary().oca,
+        finance:result.finance || emptySummary().finance,
         recent:Array.isArray(result.recent) ? result.recent : [],
         movements:Number(result.movements) || 0,
+        sourceSheet:result.sourceSheet || null,
         updatedAt:result.updatedAt || null
       });
     }
 
     if (request.method === "POST") {
       const body = typeof request.body === "string" ? JSON.parse(request.body) : request.body || {};
-      if (!Array.isArray(body.movements) || body.movements.length < 1 || body.movements.length > 100) {
-        return reply(response, 400, {ok:false,error:"La importación debe contener entre 1 y 100 movimientos."});
-      }
-      const movements = body.movements.map(validatePersonalMovement);
+      const entry = validateOcaEntry(body.entry || body);
       if (process.env.DRY_RUN === "true") {
-        return reply(response, 200, {ok:true,dryRun:true,inserted:movements.length,duplicates:[]});
+        return reply(response, 200, {ok:true,dryRun:true,row:0,range:null,mode:entry.mode,installmentAmount:entry.installmentAmount});
       }
-      const result = await callAppsScript({action:"personalImport",movements});
+      const result = await callAppsScript({action:"personalOcaCreate",entry});
       return reply(response, 200, {
         ok:true,
-        inserted:Number(result.inserted) || 0,
-        duplicates:Array.isArray(result.duplicates) ? result.duplicates : []
+        row:Number(result.row) || 0,
+        range:result.range || null,
+        mode:result.mode || entry.mode,
+        installmentAmount:Number(result.installmentAmount) || entry.installmentAmount
       });
     }
 

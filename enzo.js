@@ -1,413 +1,178 @@
-import {
-  PERSONAL_ACCOUNTS,
-  PERSONAL_CATEGORIES,
-  PERSONAL_CURRENCIES,
-  PERSONAL_TYPES,
-  parsePersonalImport,
-  validatePersonalMovement
-} from "./lib/personal.js?v=3";
+import { validateOcaEntry } from "./lib/personal.js?v=4";
 
-const title = document.querySelector("#personal-title");
-const subtitle = document.querySelector("#personal-subtitle");
 const tabs = Array.from(document.querySelectorAll(".personal-tabs .app-tab"));
-const importPanel = document.querySelector("#import-panel");
 const summaryPanel = document.querySelector("#personal-summary-panel");
 const creditPanel = document.querySelector("#credit-panel");
-const importText = document.querySelector("#import-text");
-const analyzeButton = document.querySelector("#analyze-import");
-const parseError = document.querySelector("#parse-error");
-const reviewSection = document.querySelector("#review-section");
-const reviewList = document.querySelector("#review-list");
-const reviewCount = document.querySelector("#review-count");
-const saveButton = document.querySelector("#save-import");
-const saveError = document.querySelector("#save-error");
-const saveSuccess = document.querySelector("#save-success");
 const refreshPersonal = document.querySelector("#refresh-personal");
 const personalLoading = document.querySelector("#personal-loading");
 const personalTotalCard = document.querySelector("#personal-total-card");
 const personalTotal = document.querySelector("#personal-total");
 const personalTotalNote = document.querySelector("#personal-total-note");
+const summarySource = document.querySelector("#summary-source");
 const currencySummary = document.querySelector("#currency-summary");
-const recentCard = document.querySelector("#recent-card");
-const recentList = document.querySelector("#recent-list");
+const accountsCard = document.querySelector("#accounts-card");
+const accountsList = document.querySelector("#accounts-list");
 const personalError = document.querySelector("#personal-error");
 const personalUpdated = document.querySelector("#personal-updated");
 const personalOcaCard = document.querySelector("#personal-oca-card");
-const personalOcaOutstanding = document.querySelector("#personal-oca-outstanding");
+const personalOcaNext = document.querySelector("#personal-oca-next");
+const personalOcaNote = document.querySelector("#personal-oca-note");
 const personalOcaMonths = document.querySelector("#personal-oca-months");
+const financeCard = document.querySelector("#finance-card");
+const financeMonths = document.querySelector("#finance-months");
 const creditForm = document.querySelector("#credit-form");
 const creditModes = Array.from(document.querySelectorAll('input[name="credit-mode"]'));
-const creditHeadingCopy = document.querySelector("#credit-heading-copy");
-const creditDate = document.querySelector("#credit-date");
-const creditDateLabel = document.querySelector("#credit-date-label");
 const creditDescription = document.querySelector("#credit-description");
 const creditDescriptionLabel = document.querySelector("#credit-description-label");
 const creditTotal = document.querySelector("#credit-total");
 const creditTotalLabel = document.querySelector("#credit-total-label");
-const creditGrid = document.querySelector(".credit-grid");
 const creditInstallmentsField = document.querySelector("#credit-installments-field");
 const creditInstallments = document.querySelector("#credit-installments");
 const creditValueLabel = document.querySelector("#credit-value-label");
 const creditInstallmentValue = document.querySelector("#credit-installment-value");
-const creditFirstLabel = document.querySelector("#credit-first-label");
 const creditFirstMonth = document.querySelector("#credit-first-month");
 const creditNote = document.querySelector("#credit-note");
+const creditDate = document.querySelector("#credit-date");
 const creditError = document.querySelector("#credit-error");
 const creditSuccess = document.querySelector("#credit-success");
 const saveCredit = document.querySelector("#save-credit");
-const saveCreditLabel = document.querySelector("#save-credit-label");
 
-let reviewMovements = [];
+const currencyCodes = {Pesos:"UYU",Dolares:"USD",Euros:"EUR"};
 let summaryRequest = null;
 
-function optionList(values, selected, placeholder) {
-  const fragment = document.createDocumentFragment();
-  if (placeholder) {
-    const option = document.createElement("option");
-    option.value = "";
-    option.textContent = placeholder;
-    option.selected = !selected;
-    fragment.append(option);
-  }
-  values.forEach((value) => {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = value;
-    option.selected = value === selected;
-    fragment.append(option);
-  });
-  return fragment;
+function formatMoney(value, currency = "Pesos") {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "—";
+  return new Intl.NumberFormat("es-UY", {
+    style:"currency",
+    currency:currencyCodes[currency] || currency,
+    maximumFractionDigits:currency === "Pesos" ? 0 : 2
+  }).format(amount);
 }
 
-function createField(labelText, name, movement, index, options) {
-  const label = document.createElement("label");
-  label.className = `movement-field${options?.wide ? " wide" : ""}`;
-  const text = document.createElement("span");
-  text.textContent = labelText;
-  const id = `movement-${index}-${name}`;
-  let input;
-  if (options?.values) {
-    input = document.createElement("select");
-    input.append(optionList(options.values, movement[name], options.placeholder || "Seleccionar"));
-  } else {
-    input = document.createElement("input");
-    input.type = options?.type || "text";
-    input.value = Number.isNaN(movement[name]) ? "" : String(movement[name] ?? "");
-    if (options?.inputMode) input.inputMode = options.inputMode;
-    if (options?.step) input.step = options.step;
-  }
-  input.id = id;
-  input.dataset.field = name;
-  input.dataset.index = String(index);
-  label.htmlFor = id;
-  label.append(text, input);
-  return label;
+function formatMonth(value) {
+  const match = String(value || "").match(/^(20\d{2})-(\d{2})/);
+  if (!match) return "—";
+  return new Intl.DateTimeFormat("es-UY", {month:"long",year:"numeric",timeZone:"UTC"})
+    .format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1)))
+    .replace(/^./, (letter) => letter.toUpperCase());
 }
 
-function createMovementCard(movement, index) {
-  const card = document.createElement("article");
-  card.className = "movement-card";
-  card.dataset.index = String(index);
-
-  const header = document.createElement("div");
-  header.className = "movement-card-header";
-  const number = document.createElement("span");
-  number.className = "movement-number";
-  number.textContent = `Movimiento ${index + 1}`;
-  const remove = document.createElement("button");
-  remove.className = "remove-movement";
-  remove.type = "button";
-  remove.dataset.remove = String(index);
-  remove.setAttribute("aria-label", `Quitar movimiento ${index + 1}`);
-  remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg>';
-  header.append(number, remove);
-
-  const grid = document.createElement("div");
-  grid.className = "movement-grid";
-  grid.append(
-    createField("Fecha", "date", movement, index, {type:"date"}),
-    createField("Importe", "amount", movement, index, {type:"number",inputMode:"decimal",step:"0.01"}),
-    createField("Tipo", "type", movement, index, {values:PERSONAL_TYPES}),
-    createField("Moneda", "currency", movement, index, {values:PERSONAL_CURRENCIES}),
-    createField("Categoría", "category", movement, index, {values:PERSONAL_CATEGORIES,wide:true}),
-    createField("Cuenta", "account", movement, index, {values:PERSONAL_ACCOUNTS,wide:true}),
-    createField("Descripción", "description", movement, index, {wide:true})
-  );
-  if (movement.category === "Compras a crédito" || movement.account === "OCA Crédito") {
-    grid.append(
-      createField("Cuotas", "installments", movement, index, {type:"number",inputMode:"numeric",step:"1"}),
-      createField("Primera cuota", "firstInstallment", movement, index, {type:"date"})
-    );
-  }
-
-  if (movement.duplicate) {
-    const duplicate = document.createElement("label");
-    duplicate.className = "duplicate-choice";
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.dataset.field = "allowDuplicate";
-    checkbox.dataset.index = String(index);
-    checkbox.checked = Boolean(movement.allowDuplicate);
-    duplicate.append(checkbox, document.createTextNode("Es una compra diferente: guardarla igualmente"));
-    grid.append(duplicate);
-  }
-
-  card.append(header, grid);
-  return card;
+function currentDateText() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone:"America/Montevideo",year:"numeric",month:"2-digit",day:"2-digit"
+  }).formatToParts(new Date()).reduce((result, part) => ({...result,[part.type]:part.value}), {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-function renderReview() {
-  reviewCount.textContent = String(reviewMovements.length);
-  reviewList.replaceChildren(...reviewMovements.map(createMovementCard));
-  reviewSection.hidden = reviewMovements.length === 0;
-  saveButton.querySelector("span").textContent = reviewMovements.length === 1
-    ? "Guardar 1 movimiento"
-    : `Guardar ${reviewMovements.length} movimientos`;
-}
-
-function updateMovementFromInput(input) {
-  const index = Number(input.dataset.index);
-  const field = input.dataset.field;
-  if (!Number.isInteger(index) || !reviewMovements[index] || !field) return;
-  reviewMovements[index][field] = ["amount", "installments"].includes(field) ? Number(input.value) : field === "allowDuplicate" ? input.checked : input.value;
-  input.classList.remove("invalid");
-}
-
-reviewList.addEventListener("input", (event) => {
-  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) updateMovementFromInput(event.target);
-});
-reviewList.addEventListener("change", (event) => {
-  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) updateMovementFromInput(event.target);
-});
-reviewList.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-remove]");
-  if (!button) return;
-  reviewMovements.splice(Number(button.dataset.remove), 1);
-  renderReview();
-});
-
-analyzeButton.addEventListener("click", () => {
-  parseError.hidden = true;
-  saveError.hidden = true;
-  saveSuccess.hidden = true;
-  try {
-    reviewMovements = parsePersonalImport(importText.value);
-    renderReview();
-    reviewSection.scrollIntoView({behavior:"smooth",block:"start"});
-  } catch (error) {
-    parseError.textContent = error instanceof Error ? error.message : "No se pudo interpretar el bloque.";
-    parseError.hidden = false;
-  }
-});
-
-function validateReview() {
-  const validated = [];
-  let firstInvalid = null;
-  reviewMovements.forEach((movement, index) => {
-    const card = reviewList.querySelector(`[data-index="${index}"]`);
-    card?.classList.remove("has-errors");
-    card?.querySelectorAll(".invalid").forEach((field) => field.classList.remove("invalid"));
-    try {
-      validated.push(validatePersonalMovement(movement));
-    } catch {
-      card?.classList.add("has-errors");
-      card?.querySelectorAll("input,select").forEach((field) => {
-        if (!field.value || (field.dataset.field === "amount" && Number(field.value) <= 0)) field.classList.add("invalid");
-      });
-      if (!firstInvalid) firstInvalid = card;
-    }
-  });
-  if (firstInvalid) {
-    firstInvalid.scrollIntoView({behavior:"smooth",block:"center"});
-    throw new Error("Revisá los campos marcados antes de guardar.");
-  }
-  return validated;
+function firstClosingLabel(dateText) {
+  const match = String(dateText || "").match(/^(20\d{2})-(\d{2})-(\d{2})$/);
+  if (!match) return "—";
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]), 1));
+  return new Intl.DateTimeFormat("es-UY", {month:"long",year:"numeric",timeZone:"UTC"})
+    .format(date)
+    .replace(/^./, (letter) => letter.toUpperCase());
 }
 
 async function readApiResult(response) {
   const text = await response.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error("La aplicación recibió una respuesta inesperada.");
-  }
+  let result;
+  try { result = JSON.parse(text); } catch { throw new Error("La aplicación devolvió una respuesta inesperada."); }
+  if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo completar la operación.");
+  return result;
 }
 
-saveButton.addEventListener("click", async () => {
-  saveError.hidden = true;
-  saveSuccess.hidden = true;
-  try {
-    const movements = validateReview();
-    saveButton.disabled = true;
-    saveButton.querySelector("span").textContent = "Guardando…";
-    const response = await fetch("/api/personal", {
-      method:"POST",
-      headers:{"Content-Type":"application/json","Accept":"application/json"},
-      body:JSON.stringify({movements})
-    });
-    const result = await readApiResult(response);
-    if (!response.ok || !result.ok) throw new Error(result.error || "No se pudieron guardar los movimientos.");
-
-    const duplicateIndexes = new Set((result.duplicates || []).map((item) => Number(item.index)));
-    reviewMovements = reviewMovements
-      .filter((_, index) => duplicateIndexes.has(index))
-      .map((movement) => ({...movement,duplicate:true,allowDuplicate:false}));
-    renderReview();
-
-    const inserted = Number(result.inserted) || 0;
-    saveSuccess.textContent = inserted === 1 ? "Se guardó 1 movimiento." : `Se guardaron ${inserted} movimientos.`;
-    if (reviewMovements.length) saveSuccess.textContent += ` Quedaron ${reviewMovements.length} posibles duplicados para confirmar.`;
-    saveSuccess.hidden = false;
-    if (!reviewMovements.length) importText.value = "";
-  } catch (error) {
-    saveError.textContent = error instanceof Error ? error.message : "No se pudieron guardar los movimientos.";
-    saveError.hidden = false;
-  } finally {
-    saveButton.disabled = false;
-    if (reviewMovements.length) {
-      saveButton.querySelector("span").textContent = reviewMovements.length === 1 ? "Guardar 1 movimiento" : `Guardar ${reviewMovements.length} movimientos`;
-    }
-  }
-});
-
-const CURRENCY_INFO = Object.freeze({
-  Pesos:{code:"UYU",label:"Pesos uruguayos"},
-  Dolares:{code:"USD",label:"Dólares"},
-  Euros:{code:"EUR",label:"Euros"}
-});
-
-function formatMoney(value, currency) {
-  return new Intl.NumberFormat("es-UY", {
-    style:"currency",
-    currency:CURRENCY_INFO[currency]?.code || "UYU",
-    minimumFractionDigits:0,
-    maximumFractionDigits:2
-  }).format(Number(value) || 0);
-}
-
-function todayInMontevideo() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone:"America/Montevideo", year:"numeric", month:"2-digit", day:"2-digit"
-  }).formatToParts(new Date());
-  const get = (type) => parts.find((part) => part.type === type)?.value || "";
-  return `${get("year")}-${get("month")}-${get("day")}`;
-}
-
-function firstInstallmentDate(dateText) {
-  const match = String(dateText || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return "";
-  return new Date(Date.UTC(Number(match[1]), Number(match[2]), 1)).toISOString().slice(0, 10);
-}
-
-function formatMonth(dateText) {
-  const date = new Date(`${dateText}T12:00:00Z`);
-  if (Number.isNaN(date.getTime())) return "—";
-  const label = new Intl.DateTimeFormat("es-UY", {timeZone:"UTC",month:"long",year:"numeric"}).format(date);
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-function createCurrencyCard(currency, values) {
+function createCurrencyCard(currency, data = {}) {
   const card = document.createElement("article");
   card.className = `currency-card currency-${currency.toLowerCase()}`;
-  card.innerHTML = `
-    <div class="currency-card-header">
-      <h3>${CURRENCY_INFO[currency].label}</h3>
-      <span class="currency-code">${CURRENCY_INFO[currency].code}</span>
-    </div>
-    <strong class="currency-balance">${formatMoney(values.available, currency)}</strong>
-    <span class="currency-balance-label">Disponible</span>`;
+  const header = document.createElement("div");
+  header.className = "currency-card-header";
+  const title = document.createElement("h3");
+  title.textContent = currency;
+  const code = document.createElement("span");
+  code.className = "currency-code";
+  code.textContent = currencyCodes[currency];
+  const balance = document.createElement("strong");
+  balance.className = "currency-balance";
+  balance.textContent = formatMoney(data.available, currency);
+  const label = document.createElement("span");
+  label.className = "currency-balance-label";
+  label.textContent = "Disponible";
+  header.append(title, code);
+  card.append(header, balance, label);
   return card;
 }
 
-function renderRecent(items) {
-  if (!items.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "Los movimientos importados aparecerán acá.";
-    recentList.replaceChildren(empty);
-    return;
-  }
-  recentList.replaceChildren(...items.map((item) => {
-    const row = document.createElement("div");
-    row.className = `recent-row ${item.type === "Ingreso" ? "income" : "expense"}`;
-    const copy = document.createElement("div");
-    const name = document.createElement("div");
-    name.className = "recent-title";
-    name.textContent = item.description || item.category;
-    const meta = document.createElement("div");
-    meta.className = "recent-meta";
-    const recurringText = item.category === "Suscripciones" && item.account === "OCA Crédito" ? " · mensual" : "";
-    const installmentText = item.installments ? ` · ${item.installments} cuotas` : recurringText;
-    meta.textContent = `${item.date.split("-").reverse().join("/")} · ${item.account} · ${item.category}${installmentText}`;
-    copy.append(name, meta);
-    const amount = document.createElement("strong");
-    amount.className = "recent-amount";
-    amount.textContent = `${item.type === "Ingreso" ? "+" : "−"}${formatMoney(item.amount, item.currency)}`;
-    row.append(copy, amount);
-    return row;
-  }));
+function createAmountRow(label, amount, currency, extraClass = "") {
+  const row = document.createElement("div");
+  row.className = `amount-row ${extraClass}`.trim();
+  const name = document.createElement("span");
+  name.textContent = label;
+  const value = document.createElement("strong");
+  value.textContent = formatMoney(amount, currency);
+  row.append(name, value);
+  return row;
 }
 
-function renderPersonalOca(oca = {}) {
-  personalOcaOutstanding.textContent = formatMoney(oca.outstanding, oca.currency || "Pesos");
-  const months = Array.isArray(oca.months) ? oca.months : [];
-  personalOcaMonths.replaceChildren(...months.map((item) => {
-    const row = document.createElement("div");
-    row.className = "personal-oca-row";
-    const month = document.createElement("span");
-    month.textContent = formatMonth(item.month);
-    const amount = document.createElement("strong");
-    amount.textContent = formatMoney(item.amount, oca.currency || "Pesos");
-    row.append(month, amount);
-    return row;
-  }));
+function renderAccounts(accounts = []) {
+  const visible = accounts.filter((item) => Math.abs(Number(item.amount) || 0) >= 0.005);
+  accountsList.replaceChildren(...visible.map((item) => createAmountRow(item.account, item.amount, item.currency)));
+  if (!visible.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "Todavía no hay saldos para mostrar.";
+    accountsList.append(empty);
+  }
+}
+
+function renderForecast(container, months = [], currency) {
+  const rows = months.map((item) => createAmountRow(formatMonth(item.month), item.amount, currency, Number(item.amount) < 0 ? "negative" : ""));
+  if (!rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No hay una proyección disponible.";
+    rows.push(empty);
+  }
+  container.replaceChildren(...rows);
 }
 
 function formatUpdatedAt(value) {
-  const date = value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) return "Actualizado recién";
-  return "Actualizado " + new Intl.DateTimeFormat("es-UY", {
-    timeZone:"America/Montevideo",
-    hour:"2-digit",
-    minute:"2-digit"
-  }).format(date);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `Actualizado ${new Intl.DateTimeFormat("es-UY", {dateStyle:"short",timeStyle:"short"}).format(date)}`;
 }
 
 async function loadPersonalSummary() {
   if (summaryRequest) return summaryRequest;
   personalError.hidden = true;
   personalLoading.hidden = false;
-  personalTotalCard.hidden = true;
-  currencySummary.hidden = true;
-  personalOcaCard.hidden = true;
-  recentCard.hidden = true;
-  refreshPersonal.disabled = true;
   summaryPanel.setAttribute("aria-busy", "true");
   summaryRequest = (async () => {
     try {
-      const response = await fetch("/api/personal", {headers:{"Accept":"application/json"}});
-      const result = await readApiResult(response);
-      if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo cargar tu estado.");
+      const result = await readApiResult(await fetch("/api/personal", {headers:{Accept:"application/json"}}));
       const currencies = result.currencies || {};
-      const hasConvertedTotal = result.totalAvailablePesos !== null && result.totalAvailablePesos !== undefined && Number.isFinite(Number(result.totalAvailablePesos));
-      personalTotal.textContent = hasConvertedTotal ? formatMoney(result.totalAvailablePesos, "Pesos") : "—";
-      personalTotalNote.textContent = hasConvertedTotal
-        ? "Pesos, dólares y euros convertidos a pesos uruguayos."
-        : "Falta publicar la versión nueva de Google Apps Script para calcular la conversión.";
-      currencySummary.replaceChildren(...PERSONAL_CURRENCIES.map((currency) => createCurrencyCard(currency, currencies[currency] || {available:0,debt:0,net:0})));
-      renderPersonalOca(result.oca || {});
-      renderRecent(Array.isArray(result.recent) ? result.recent : []);
+      personalTotal.textContent = result.totalAvailablePesos === null ? "—" : formatMoney(result.totalAvailablePesos, "Pesos");
+      personalTotalNote.textContent = "Pesos, dólares y euros de tus cajas convertidos a pesos uruguayos.";
+      summarySource.textContent = result.sourceSheet ? `Caja ${result.sourceSheet} y proyecciones de Finanzas.` : "Leyendo tus cajas y Finanzas.";
+      currencySummary.replaceChildren(...["Pesos", "Dolares", "Euros"].map((currency) => createCurrencyCard(currency, currencies[currency])));
+      renderAccounts(result.accounts || []);
+      const oca = result.oca || {};
+      personalOcaNext.textContent = formatMoney(oca.nextPayment, oca.currency || "Pesos");
+      personalOcaNote.textContent = `${Number(oca.activeItems) || 0} cargos activos · saldo finito pendiente ${formatMoney(oca.outstanding, oca.currency || "Pesos")}.`;
+      renderForecast(personalOcaMonths, oca.months || [], oca.currency || "Pesos");
+      const finance = result.finance || {};
+      renderForecast(financeMonths, finance.months || [], finance.currency || "Dolares");
       personalTotalCard.hidden = false;
       currencySummary.hidden = false;
+      accountsCard.hidden = false;
       personalOcaCard.hidden = false;
-      recentCard.hidden = false;
+      financeCard.hidden = false;
       personalUpdated.textContent = formatUpdatedAt(result.updatedAt);
     } catch (error) {
       personalError.textContent = error instanceof Error ? error.message : "No se pudo cargar tu estado.";
       personalError.hidden = false;
     } finally {
       personalLoading.hidden = true;
-      refreshPersonal.disabled = false;
       summaryPanel.removeAttribute("aria-busy");
       summaryRequest = null;
     }
@@ -415,111 +180,90 @@ async function loadPersonalSummary() {
   return summaryRequest;
 }
 
-function isSubscriptionMode() {
-  return creditModes.find((input) => input.checked)?.value === "subscription";
-}
-
-function updateCreditPreview() {
-  const subscription = isSubscriptionMode();
-  const total = Number(creditTotal.value);
-  const installments = Number(creditInstallments.value);
-  const previewValue = subscription ? total : total > 0 && installments > 0 ? total / installments : 0;
-  creditInstallmentValue.textContent = formatMoney(previewValue, "Pesos");
-  creditFirstMonth.textContent = formatMonth(firstInstallmentDate(creditDate.value));
+function selectedCreditMode() {
+  return creditModes.find((input) => input.checked)?.value || "installments";
 }
 
 function updateCreditMode() {
-  const subscription = isSubscriptionMode();
-  creditHeadingCopy.textContent = subscription
-    ? "Registrá el importe mensual para incluirlo en los próximos pagos."
-    : "Registrá el total y la aplicación calcula el valor de cada cuota.";
-  creditDateLabel.textContent = subscription ? "Fecha de alta" : "Fecha de compra";
-  creditDescriptionLabel.textContent = subscription ? "¿Qué suscripción es?" : "¿Qué compraste?";
-  creditDescription.placeholder = subscription ? "Ej. Spotify" : "Ej. Notebook";
-  creditTotalLabel.textContent = subscription ? "Importe mensual" : "Valor total";
+  const subscription = selectedCreditMode() === "subscription";
   creditInstallmentsField.hidden = subscription;
   creditInstallments.required = !subscription;
-  creditGrid.classList.toggle("single", subscription);
-  creditValueLabel.textContent = subscription ? "Pago mensual" : "Valor de cada cuota";
-  creditFirstLabel.textContent = subscription ? "Primer cobro" : "Primera cuota";
+  creditDescriptionLabel.textContent = subscription ? "Nombre de la suscripción" : "¿Qué compraste?";
+  creditDescription.placeholder = subscription ? "Ej. Apple Cloud" : "Ej. Notebook";
+  creditTotalLabel.textContent = subscription ? "Importe mensual" : "Valor total";
+  creditValueLabel.textContent = subscription ? "Cargo mensual" : "Valor de cada cuota";
   creditNote.textContent = subscription
-    ? "Se suma a cada mes futuro de OCA hasta que elimines o cambies la fila en MOVIMIENTOS. No reduce tu efectivo hoy."
-    : "Se guardará internamente como “Compras a crédito” en “OCA Crédito”. No reduce tu efectivo hoy.";
-  saveCreditLabel.textContent = subscription ? "Guardar suscripción" : "Guardar compra en cuotas";
+    ? "Se repetirá en todos los meses futuros de la proyección OCA."
+    : "La primera cuota se proyecta para el próximo mes.";
   updateCreditPreview();
 }
 
-creditDate.value = todayInMontevideo();
-creditDate.addEventListener("input", updateCreditPreview);
-creditTotal.addEventListener("input", updateCreditPreview);
-creditInstallments.addEventListener("input", updateCreditPreview);
+function updateCreditPreview() {
+  const amount = Number(creditTotal.value);
+  const installments = Number(creditInstallments.value);
+  const subscription = selectedCreditMode() === "subscription";
+  const installmentAmount = subscription ? amount : amount / installments;
+  creditInstallmentValue.textContent = Number.isFinite(installmentAmount) && installmentAmount > 0
+    ? formatMoney(installmentAmount, "Pesos")
+    : formatMoney(0, "Pesos");
+  creditFirstMonth.textContent = firstClosingLabel(creditDate.value);
+}
+
 creditModes.forEach((input) => input.addEventListener("change", updateCreditMode));
-updateCreditMode();
+[creditDate, creditTotal, creditInstallments].forEach((input) => input.addEventListener("input", updateCreditPreview));
 
 creditForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   creditError.hidden = true;
   creditSuccess.hidden = true;
   try {
-    const subscription = isSubscriptionMode();
-    const movement = validatePersonalMovement({
+    const entry = validateOcaEntry({
+      mode:selectedCreditMode(),
       date:creditDate.value,
-      type:"Egreso",
-      currency:"Pesos",
-      amount:creditTotal.value,
-      category:subscription ? "Suscripciones" : "Compras a crédito",
-      account:"OCA Crédito",
       description:creditDescription.value,
-      installments:subscription ? 0 : creditInstallments.value,
-      firstInstallment:firstInstallmentDate(creditDate.value)
+      amount:Number(creditTotal.value),
+      installments:Number(creditInstallments.value)
     });
-    if (!movement.description) throw new Error(subscription ? "Indicá qué suscripción es." : "Indicá qué compraste.");
     saveCredit.disabled = true;
     saveCredit.querySelector("span").textContent = "Guardando…";
-    const response = await fetch("/api/personal", {
+    const result = await readApiResult(await fetch("/api/personal", {
       method:"POST",
-      headers:{"Content-Type":"application/json","Accept":"application/json"},
-      body:JSON.stringify({movements:[movement]})
-    });
-    const result = await readApiResult(response);
-    if (!response.ok || !result.ok) throw new Error(result.error || (subscription ? "No se pudo guardar la suscripción." : "No se pudo guardar la compra."));
-    if (result.duplicates?.length) throw new Error(`${subscription ? "Esta suscripción" : "Esta compra"} parece ya registrada. Revisá MOVIMIENTOS antes de repetirla.`);
-    creditSuccess.textContent = subscription
-      ? `Suscripción guardada por ${formatMoney(movement.installmentAmount, "Pesos")} al mes.`
-      : `Compra guardada en ${movement.installments} cuotas de ${formatMoney(movement.installmentAmount, "Pesos")}.`;
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({entry})
+    }));
+    creditSuccess.textContent = `Guardado en OCA, fila ${result.row}.`;
     creditSuccess.hidden = false;
-    creditDescription.value = "";
-    creditTotal.value = "";
-    creditInstallments.value = "";
-    creditDate.value = todayInMontevideo();
+    creditForm.reset();
+    creditDate.value = currentDateText();
     updateCreditMode();
     summaryRequest = null;
   } catch (error) {
-    creditError.textContent = error instanceof Error ? error.message : "No se pudo guardar el movimiento de OCA.";
+    creditError.textContent = error instanceof Error ? error.message : "No se pudo guardar en OCA.";
     creditError.hidden = false;
   } finally {
     saveCredit.disabled = false;
-    saveCreditLabel.textContent = isSubscriptionMode() ? "Guardar suscripción" : "Guardar compra en cuotas";
+    saveCredit.querySelector("span").textContent = "Guardar en OCA";
   }
 });
 
-function activateView(view) {
-  const views = {import:importPanel,summary:summaryPanel,credit:creditPanel};
-  Object.entries(views).forEach(([name, panel]) => { panel.hidden = name !== view; });
-  title.textContent = view === "summary" ? "Mi estado financiero" : view === "credit" ? "Tarjeta OCA" : "Importar gastos";
-  subtitle.textContent = view === "summary"
-    ? "Tu dinero disponible y próximos pagos en un vistazo."
-    : view === "credit"
-      ? "Compras en cuotas y suscripciones en un mismo lugar."
-      : "Capturas a movimientos, sin registrar uno por uno.";
+function setView(view) {
+  const summary = view === "summary";
+  summaryPanel.hidden = !summary;
+  creditPanel.hidden = summary;
   tabs.forEach((tab) => {
     const active = tab.dataset.view === view;
     tab.classList.toggle("active", active);
     tab.setAttribute("aria-selected", String(active));
-    tab.tabIndex = active ? 0 : -1;
   });
-  if (view === "summary") loadPersonalSummary();
+  if (summary) loadPersonalSummary();
 }
 
-tabs.forEach((tab) => tab.addEventListener("click", () => activateView(tab.dataset.view)));
-refreshPersonal.addEventListener("click", loadPersonalSummary);
+tabs.forEach((tab) => tab.addEventListener("click", () => setView(tab.dataset.view)));
+refreshPersonal.addEventListener("click", () => {
+  summaryRequest = null;
+  loadPersonalSummary();
+});
+
+creditDate.value = currentDateText();
+updateCreditMode();
+loadPersonalSummary();

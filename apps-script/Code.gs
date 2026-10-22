@@ -1,5 +1,5 @@
 const CONFIG = Object.freeze({
-  VERSION: "2026-09-22-v16",
+  VERSION: "2026-10-22-v18",
   SPREADSHEET_ID: "1QfWNrNWRQsFpWZNnYiItdRDop_d5Hw9CgoNC1s7wMxE",
   SHEET_GID: 1406094759,
   CONFIG_SHEET_GID: 900241103,
@@ -14,10 +14,18 @@ const CONFIG = Object.freeze({
   OCA_SPREADSHEET_ID: "1cnAoaGhzMyu0mFg5U_WZ6XBRQJkTmAlIaFbZlmNwdtI",
   OCA_SHEET_GID: 955665856,
   OCA_RANGE: "F18:J40",
-  PERSONAL_SPREADSHEET_ID: "1rPs2YmiHSdpB_m4XDHEz1LFcH1LbWU4TRIWf0InjvKs",
-  PERSONAL_SHEET_NAME: "MOVIMIENTOS",
-  PERSONAL_DASHBOARD_SHEET_NAME: "DASHBOARD",
-  PERSONAL_EXCHANGE_RATE_RANGE: "P4:P5"
+  ENZO_BOXES_SPREADSHEET_ID: "1VPZL31ruHgzx80UW-MPng2Abk1mdERffE0Je6BpeKHg",
+  ENZO_BOXES_CONFIG_SHEET_NAME: "CONFIG",
+  ENZO_BOXES_EXCHANGE_RATE_RANGE: "I20:I21",
+  FINANCES_SPREADSHEET_ID: "1rPs2YmiHSdpB_m4XDHEz1LFcH1LbWU4TRIWf0InjvKs",
+  FINANCES_OCA_SHEET_GID: 1825070646,
+  FINANCES_VIEW_SHEET_NAME: "FINANZAS VIEWER",
+  FINANCES_PROJECTION_HEADER_RANGE: "C1:AC1",
+  FINANCES_PROJECTION_VALUE_RANGE: "C47:AC47",
+  PERSONAL_OCA_DATA_START_ROW: 3,
+  PERSONAL_OCA_WRITE_START_ROW: 6,
+  PERSONAL_OCA_END_ROW: 32,
+  PERSONAL_FORECAST_MONTHS: 12
 });
 
 function doGet() {
@@ -47,8 +55,8 @@ function doPost(event) {
     if (payload.action === "personalSummary") {
       return json_(Object.assign({ok:true,version:CONFIG.VERSION}, getPersonalSummary_()));
     }
-    if (payload.action === "personalImport") {
-      return json_(Object.assign({ok:true,version:CONFIG.VERSION}, appendPersonalMovements_(payload.movements)));
+    if (payload.action === "personalOcaCreate") {
+      return json_(Object.assign({ok:true,version:CONFIG.VERSION}, appendPersonalOcaEntry_(payload.entry)));
     }
     const expense = validateExpense_(payload);
     const submissionId = validateSubmissionId_(payload.submissionId);
@@ -59,243 +67,85 @@ function doPost(event) {
   }
 }
 
-function getPersonalSheet_() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.PERSONAL_SPREADSHEET_ID);
-  const sheet = spreadsheet.getSheetByName(CONFIG.PERSONAL_SHEET_NAME);
-  if (!sheet) throw new Error("No se encontró la pestaña MOVIMIENTOS de la planilla personal.");
-  return sheet;
-}
-
-function appendPersonalMovements_(input) {
-  if (!Array.isArray(input) || input.length < 1 || input.length > 100) {
-    throw new Error("La importación debe contener entre 1 y 100 movimientos.");
-  }
-
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-  try {
-    const sheet = getPersonalSheet_();
-    const lastRow = Math.max(sheet.getLastRow(), 1);
-    const existingFingerprints = {};
-    if (lastRow >= 2) {
-      sheet.getRange(2, 9, lastRow - 1, 1).getDisplayValues().forEach(function(row) {
-        const value = cleanText_(row[0], 128);
-        if (value) existingFingerprints[value] = true;
-      });
-    }
-
-    const rows = [];
-    const duplicates = [];
-    input.forEach(function(raw, index) {
-      const movement = validatePersonalMovement_(raw);
-      const fingerprint = personalFingerprint_(movement);
-      if (existingFingerprints[fingerprint] && !movement.allowDuplicate) {
-        duplicates.push({index:index,fingerprint:fingerprint,description:movement.description});
-        return;
-      }
-
-      const date = Utilities.parseDate(movement.date, "America/Montevideo", "yyyy-MM-dd");
-      const firstInstallment = movement.firstInstallment
-        ? Utilities.parseDate(movement.firstInstallment, "America/Montevideo", "yyyy-MM-dd")
-        : "";
-      rows.push([
-        Utilities.getUuid(),
-        date,
-        movement.type,
-        movement.currency,
-        movement.amount,
-        movement.category,
-        movement.account,
-        movement.description,
-        fingerprint,
-        new Date(),
-        movement.installments || "",
-        firstInstallment,
-        movement.installmentAmount || ""
-      ]);
-      existingFingerprints[fingerprint] = true;
-    });
-
-    if (rows.length) {
-      const startRow = Math.max(sheet.getLastRow() + 1, 2);
-      sheet.getRange(startRow, 1, rows.length, 13).setValues(rows);
-      sheet.getRange(startRow, 2, rows.length, 1).setNumberFormat("dd/mm/yyyy");
-      sheet.getRange(startRow, 5, rows.length, 1).setNumberFormat("0.00");
-      sheet.getRange(startRow, 10, rows.length, 1).setNumberFormat("dd/mm/yyyy hh:mm");
-      sheet.getRange(startRow, 11, rows.length, 1).setNumberFormat("0");
-      sheet.getRange(startRow, 12, rows.length, 1).setNumberFormat("dd/mm/yyyy");
-      sheet.getRange(startRow, 13, rows.length, 1).setNumberFormat("0.00");
-      SpreadsheetApp.flush();
-    }
-
-    return {inserted:rows.length,duplicates:duplicates};
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function validatePersonalMovement_(input) {
-  const allowedTypes = ["Ingreso", "Egreso"];
-  const allowedCurrencies = ["Pesos", "Dolares", "Euros"];
-  const allowedAccounts = ["Efectivo", "BROU", "OCA Blue", "Prex", "N26", "Paypal", "Revolut", "Fiverr", "Grow", "Deuda Mamá", "Mercado Pago", "OCA Crédito"];
-  const allowedCategories = [
-    "Mama", "Ahorro", "Prestamo", "Freelancer", "Ventas", "Otros (Dev IVA, Amigos, etc)",
-    "Saldo Inicial", "Cambio de moneda", "Ahorros", "Prestamos", "OCA", "Comida", "Transporte",
-    "Celular", "Gimnasio", "Ropa", "Suscripciones", "Educacion y eventos", "Viajes",
-    "Entretenimietno y salidas", "Salud y estetica", "Compras", "Otros asuntos",
-    "Comisiones bancarias", "Capex", "Ciudadania italiana", "Inversiones", "Pago Deuda Mamá",
-    "Compras a crédito"
-  ];
-  const movement = {
-    date:cleanText_(input && input.date, 10),
-    type:cleanText_(input && input.type, 16),
-    currency:cleanText_(input && input.currency, 16),
-    amount:Number(input && input.amount),
-    category:cleanText_(input && input.category, 80),
-    account:cleanText_(input && input.account, 80),
-    description:cleanText_(input && input.description, 300),
-    installments:Number(input && input.installments) || 0,
-    firstInstallment:cleanText_(input && input.firstInstallment, 10),
-    installmentAmount:Number(input && input.installmentAmount) || 0,
-    allowDuplicate:Boolean(input && input.allowDuplicate)
-  };
-
-  parseDateParts_(movement.date);
-  if (allowedTypes.indexOf(movement.type) === -1) throw new Error("Tipo personal inválido.");
-  if (allowedCurrencies.indexOf(movement.currency) === -1) throw new Error("Moneda personal inválida.");
-  if (!isFinite(movement.amount) || movement.amount <= 0 || movement.amount > 100000000) throw new Error("Importe personal inválido.");
-  if (allowedCategories.indexOf(movement.category) === -1) throw new Error("Categoría personal inválida: " + movement.category);
-  if (allowedAccounts.indexOf(movement.account) === -1) throw new Error("Cuenta personal inválida: " + movement.account);
-  if (movement.category === "Compras a crédito") {
-    if (movement.type !== "Egreso" || movement.account !== "OCA Crédito") throw new Error("La compra a crédito debe registrarse como egreso de OCA Crédito.");
-    if (!Number.isInteger(movement.installments) || movement.installments < 1 || movement.installments > 36) throw new Error("Cuotas inválidas.");
-    parseDateParts_(movement.firstInstallment);
-    movement.installmentAmount = roundMoney_(movement.amount / movement.installments);
-  } else if (movement.category === "Suscripciones" && movement.account === "OCA Crédito") {
-    if (movement.type !== "Egreso") throw new Error("La suscripción de OCA debe registrarse como egreso.");
-    parseDateParts_(movement.firstInstallment);
-    movement.installments = 0;
-    movement.installmentAmount = roundMoney_(movement.amount);
-  } else {
-    movement.installments = 0;
-    movement.firstInstallment = "";
-    movement.installmentAmount = 0;
-  }
-  return movement;
-}
-
-function personalFingerprint_(movement) {
-  const canonical = [
-    movement.date,
-    movement.type,
-    movement.currency,
-    movement.amount.toFixed(2),
-    normalizeText_(movement.category),
-    normalizeText_(movement.account),
-    normalizeText_(movement.description),
-    movement.installments || 0,
-    movement.firstInstallment || "",
-    Number(movement.installmentAmount || 0).toFixed(2)
-  ].join("|");
-  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, canonical)
-    .map(function(byte) { return (byte + 256).toString(16).slice(-2); })
-    .join("");
-}
-
 function getPersonalSummary_() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.PERSONAL_SPREADSHEET_ID);
-  const sheet = spreadsheet.getSheetByName(CONFIG.PERSONAL_SHEET_NAME);
-  if (!sheet) throw new Error("No se encontró la pestaña " + CONFIG.PERSONAL_SHEET_NAME + ".");
+  const today = new Date();
+  const boxes = SpreadsheetApp.openById(CONFIG.ENZO_BOXES_SPREADSHEET_ID);
+  const sheetName = personalMonthSheetName_(today);
+  const sheet = boxes.getSheetByName(sheetName);
+  if (!sheet) throw new Error("No se encontró la pestaña mensual " + sheetName + " en la caja de Enzo.");
   const lastRow = sheet.getLastRow();
-  const rows = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, 13).getValues() : [];
-  const summary = summarizePersonalRows_(rows, null, getPersonalExchangeRates_(spreadsheet));
+  const rows = lastRow >= CONFIG.DATA_START_ROW
+    ? sheet.getRange(CONFIG.DATA_START_ROW, 1, lastRow - CONFIG.DATA_START_ROW + 1, 7).getValues()
+    : [];
+  const summary = summarizePersonalBoxRows_(rows, getPersonalExchangeRates_(boxes));
+  const finances = SpreadsheetApp.openById(CONFIG.FINANCES_SPREADSHEET_ID);
+  const ocaSheet = getPersonalOcaSheet_(finances);
+  const ocaRows = ocaSheet.getRange(
+    CONFIG.PERSONAL_OCA_DATA_START_ROW,
+    1,
+    CONFIG.PERSONAL_OCA_END_ROW - CONFIG.PERSONAL_OCA_DATA_START_ROW + 1,
+    7
+  ).getValues();
+  summary.oca = summarizePersonalOcaRows_(ocaRows, today, CONFIG.PERSONAL_FORECAST_MONTHS);
+  const viewer = finances.getSheetByName(CONFIG.FINANCES_VIEW_SHEET_NAME);
+  if (!viewer) throw new Error("No se encontró la pestaña " + CONFIG.FINANCES_VIEW_SHEET_NAME + ".");
+  summary.finance = summarizePersonalFinanceProjection_(
+    viewer.getRange(CONFIG.FINANCES_PROJECTION_HEADER_RANGE).getValues()[0],
+    viewer.getRange(CONFIG.FINANCES_PROJECTION_VALUE_RANGE).getValues()[0],
+    today,
+    CONFIG.PERSONAL_FORECAST_MONTHS
+  );
+  summary.sourceSheet = sheetName;
   summary.updatedAt = new Date().toISOString();
   return summary;
 }
 
 function getPersonalExchangeRates_(spreadsheet) {
-  const dashboard = spreadsheet.getSheetByName(CONFIG.PERSONAL_DASHBOARD_SHEET_NAME);
-  if (!dashboard) throw new Error("No se encontró la pestaña " + CONFIG.PERSONAL_DASHBOARD_SHEET_NAME + ".");
-  const values = dashboard.getRange(CONFIG.PERSONAL_EXCHANGE_RATE_RANGE).getValues();
-  const rates = {Dolares:Number(values[0][0]),Euros:Number(values[1][0])};
-  if (!isFinite(rates.Dolares) || rates.Dolares <= 0 || !isFinite(rates.Euros) || rates.Euros <= 0) {
-    throw new Error("Revisá las cotizaciones de compra USD y EUR en DASHBOARD!" + CONFIG.PERSONAL_EXCHANGE_RATE_RANGE + ".");
+  const config = spreadsheet.getSheetByName(CONFIG.ENZO_BOXES_CONFIG_SHEET_NAME);
+  if (!config) throw new Error("No se encontró la pestaña CONFIG de la caja de Enzo.");
+  const values = config.getRange(CONFIG.ENZO_BOXES_EXCHANGE_RATE_RANGE).getValues();
+  const uyuPerUsd = Number(values[0][0]);
+  const eurPerUsd = Number(values[1][0]);
+  if (!isFinite(uyuPerUsd) || uyuPerUsd <= 0 || !isFinite(eurPerUsd) || eurPerUsd <= 0) {
+    throw new Error("Revisá las cotizaciones en CONFIG!" + CONFIG.ENZO_BOXES_EXCHANGE_RATE_RANGE + ".");
   }
-  return rates;
+  return {Dolares:uyuPerUsd,Euros:uyuPerUsd / eurPerUsd};
 }
 
-function summarizePersonalRows_(rows, today, exchangeRates) {
+function summarizePersonalBoxRows_(rows, exchangeRates) {
   const rates = Object.assign({Dolares:0,Euros:0}, exchangeRates || {});
   const currencies = {};
   const accounts = {};
   const recent = [];
-  const currentMonth = personalMonthStartText_(sheetDateText_(today || new Date()), 0);
-  const oca = {
-    currency:"Pesos",
-    outstanding:0,
-    months:[1, 2, 3, 4, 5, 6].map(function(offset) {
-      return {month:personalMonthStartText_(currentMonth, offset),amount:0};
-    })
-  };
 
   ["Pesos", "Dolares", "Euros"].forEach(function(currency) {
     currencies[currency] = {available:0,debt:0,net:0};
   });
 
   rows.forEach(function(row) {
-    const date = sheetDateText_(row[1]);
-    const type = cleanText_(row[2], 16);
-    const currency = cleanText_(row[3], 16);
-    const amount = Number(row[4]);
-    const category = cleanText_(row[5], 80);
-    const account = cleanText_(row[6], 80);
+    const date = sheetDateText_(row[0]);
+    const type = cleanText_(row[1], 16);
+    const currency = cleanText_(row[2], 16);
+    const amount = Number(row[3]);
+    const category = cleanText_(row[4], 80);
+    const account = cleanText_(row[5], 80) || "Efectivo";
     if (!date || ["Ingreso", "Egreso"].indexOf(type) === -1 || !currencies[currency] || !isFinite(amount) || amount <= 0) return;
-
-    const installments = Number(row[10]) || 0;
-    const firstInstallment = sheetDateText_(row[11]);
-    const installmentAmount = Number(row[12]) || (installments > 0 ? amount / installments : 0);
-    const isCreditPurchase = category === "Compras a crédito" && account === "OCA Crédito";
-    const isCreditSubscription = category === "Suscripciones" && account === "OCA Crédito";
-
-    if (isCreditPurchase) {
-      if (currency === "Pesos" && installments > 0 && firstInstallment && isFinite(installmentAmount)) {
-        const elapsed = personalMonthDifference_(firstInstallment, currentMonth);
-        const remaining = elapsed < 0 ? installments : Math.max(0, installments - elapsed);
-        oca.outstanding += remaining * installmentAmount;
-        oca.months.forEach(function(item) {
-          const index = personalMonthDifference_(firstInstallment, item.month);
-          if (index >= 0 && index < installments) item.amount += installmentAmount;
-        });
-      }
-    } else if (isCreditSubscription) {
-      if (currency === "Pesos" && firstInstallment && isFinite(installmentAmount) && installmentAmount > 0) {
-        oca.months.forEach(function(item) {
-          if (personalMonthDifference_(firstInstallment, item.month) >= 0) item.amount += installmentAmount;
-        });
-      }
-    } else if (account === "Deuda Mamá") {
-      currencies[currency].debt += type === "Egreso" ? amount : -amount;
-    } else {
-      const key = currency + "|" + account;
-      if (!accounts[key]) accounts[key] = {currency:currency,account:account,amount:0};
-      accounts[key].amount += type === "Ingreso" ? amount : -amount;
-      currencies[currency].available += type === "Ingreso" ? amount : -amount;
-    }
-    if (category === "Pago Deuda Mamá" && account !== "Deuda Mamá" && type === "Egreso") {
-      currencies[currency].debt -= amount;
-    }
+    const signedAmount = type === "Ingreso" ? amount : -amount;
+    const key = currency + "|" + account;
+    if (!accounts[key]) accounts[key] = {currency:currency,account:account,amount:0};
+    accounts[key].amount += signedAmount;
+    currencies[currency].available += signedAmount;
 
     recent.push({
-      id:cleanText_(row[0], 80),date:date,type:type,currency:currency,amount:amount,
-      category:category,account:account,description:cleanText_(row[7], 300),
-      installments:installments,firstInstallment:firstInstallment,installmentAmount:roundMoney_(installmentAmount)
+      date:date,type:type,currency:currency,amount:amount,
+      category:category,account:account,description:cleanText_(row[6], 300)
     });
   });
 
   Object.keys(currencies).forEach(function(currency) {
     currencies[currency].available = roundMoney_(currencies[currency].available);
-    currencies[currency].debt = roundMoney_(Math.max(0, currencies[currency].debt));
-    currencies[currency].net = roundMoney_(currencies[currency].available - currencies[currency].debt);
+    currencies[currency].debt = 0;
+    currencies[currency].net = currencies[currency].available;
   });
 
   const accountList = Object.keys(accounts).map(function(key) {
@@ -304,8 +154,6 @@ function summarizePersonalRows_(rows, today, exchangeRates) {
     return a.currency.localeCompare(b.currency) || a.account.localeCompare(b.account);
   });
 
-  oca.outstanding = roundMoney_(oca.outstanding);
-  oca.months.forEach(function(item) { item.amount = roundMoney_(item.amount); });
   const totalAvailablePesos = roundMoney_(
     currencies.Pesos.available +
     currencies.Dolares.available * Number(rates.Dolares || 0) +
@@ -317,22 +165,151 @@ function summarizePersonalRows_(rows, today, exchangeRates) {
     totalAvailablePesos:totalAvailablePesos,
     exchangeRates:{Dolares:Number(rates.Dolares || 0),Euros:Number(rates.Euros || 0)},
     accounts:accountList,
-    oca:oca,
     recent:recent.slice(-10).reverse(),
     movements:recent.length
   };
+}
+
+function summarizePersonalOcaRows_(rows, today, monthCount) {
+  const count = Number(monthCount) || 12;
+  const currentMonth = personalMonthStartText_(sheetDateText_(today || new Date()), 0);
+  const forecast = [];
+  for (let offset = 1; offset <= count; offset += 1) {
+    forecast.push({month:personalMonthStartText_(currentMonth, offset),amount:0});
+  }
+  let outstanding = 0;
+  let activeItems = 0;
+
+  rows.forEach(function(row) {
+    const description = cleanText_(row[2], 300);
+    const mode = normalizeText_(row[3]);
+    const currentInstallment = Number(row[4]);
+    const totalInstallments = Number(row[5]);
+    const installmentAmount = Number(row[6]);
+    if (!description || !isFinite(installmentAmount) || installmentAmount <= 0) return;
+    activeItems += 1;
+
+    if (mode === "SUSCRIPCION") {
+      forecast.forEach(function(item) { item.amount += installmentAmount; });
+      return;
+    }
+
+    if (Number.isInteger(currentInstallment) && Number.isInteger(totalInstallments) &&
+        currentInstallment >= 1 && totalInstallments >= currentInstallment) {
+      const remaining = totalInstallments - currentInstallment + 1;
+      outstanding += remaining * installmentAmount;
+      forecast.forEach(function(item, index) {
+        if (index < remaining) item.amount += installmentAmount;
+      });
+      return;
+    }
+
+    outstanding += installmentAmount;
+    forecast[0].amount += installmentAmount;
+  });
+
+  forecast.forEach(function(item) { item.amount = roundMoney_(item.amount); });
+  return {
+    currency:"Pesos",
+    outstanding:roundMoney_(outstanding),
+    nextPayment:forecast.length ? forecast[0].amount : 0,
+    projectedTotal:roundMoney_(forecast.reduce(function(sum, item) { return sum + item.amount; }, 0)),
+    activeItems:activeItems,
+    months:forecast
+  };
+}
+
+function summarizePersonalFinanceProjection_(headers, values, today, monthCount) {
+  const currentMonth = personalMonthStartText_(sheetDateText_(today || new Date()), 0).slice(0, 7);
+  const months = [];
+  (headers || []).forEach(function(header, index) {
+    const dateText = sheetDateText_(header);
+    const amount = Number((values || [])[index]);
+    if (!dateText || dateText.slice(0, 7) < currentMonth || !isFinite(amount)) return;
+    months.push({month:personalMonthStartText_(dateText, 0),amount:roundMoney_(amount)});
+  });
+  return {currency:"Dolares",months:months.slice(0, Number(monthCount) || 12)};
+}
+
+function validatePersonalOcaEntry_(input) {
+  const entry = {
+    mode:cleanText_(input && input.mode, 20),
+    date:cleanText_(input && input.date, 10),
+    description:cleanText_(input && input.description, 300),
+    amount:Number(input && input.amount),
+    installments:Number(input && input.installments) || 0
+  };
+  if (["installments", "subscription"].indexOf(entry.mode) === -1) throw new Error("Tipo de registro OCA inválido.");
+  parseDateParts_(entry.date);
+  if (!entry.description) throw new Error("Falta la descripción de OCA.");
+  if (!isFinite(entry.amount) || entry.amount <= 0 || entry.amount > 100000000) throw new Error("Importe OCA inválido.");
+  if (entry.mode === "installments") {
+    if (!Number.isInteger(entry.installments) || entry.installments < 1 || entry.installments > 36) throw new Error("Las cuotas deben estar entre 1 y 36.");
+  } else {
+    entry.installments = 0;
+  }
+  entry.installmentAmount = roundMoney_(entry.mode === "installments" ? entry.amount / entry.installments : entry.amount);
+  return entry;
+}
+
+function appendPersonalOcaEntry_(input) {
+  const entry = validatePersonalOcaEntry_(input);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const spreadsheet = SpreadsheetApp.openById(CONFIG.FINANCES_SPREADSHEET_ID);
+    const sheet = getPersonalOcaSheet_(spreadsheet);
+    const rowCount = CONFIG.PERSONAL_OCA_END_ROW - CONFIG.PERSONAL_OCA_WRITE_START_ROW + 1;
+    const rows = sheet.getRange(CONFIG.PERSONAL_OCA_WRITE_START_ROW, 2, rowCount, 6).getValues();
+    const emptyIndex = rows.findIndex(function(row) {
+      return !cleanText_(row[1], 300) && (row[5] === "" || row[5] === null);
+    });
+    if (emptyIndex < 0) throw new Error("No quedan filas libres dentro de OCA!B6:G32.");
+    const rowNumber = CONFIG.PERSONAL_OCA_WRITE_START_ROW + emptyIndex;
+    const date = Utilities.parseDate(entry.date, "America/Montevideo", "yyyy-MM-dd");
+    const isSubscription = entry.mode === "subscription";
+    sheet.getRange(rowNumber, 2, 1, 6).setValues([[
+      date,
+      entry.description,
+      isSubscription ? "SUSCRIPCION" : "",
+      isSubscription ? "" : 1,
+      isSubscription ? "" : entry.installments,
+      entry.installmentAmount
+    ]]);
+    sheet.getRange(rowNumber, 2).setNumberFormat("yyyy-mm-dd");
+    sheet.getRange(rowNumber, 7).setNumberFormat("0.00");
+    const formulas = [];
+    for (let offset = 0; offset < CONFIG.PERSONAL_FORECAST_MONTHS; offset += 1) {
+      formulas.push(isSubscription
+        ? "=$G$" + rowNumber
+        : "=IF(COLUMN()-COLUMN($K$1)<=$F$" + rowNumber + "-$E$" + rowNumber + ";$G$" + rowNumber + ";0)");
+    }
+    sheet.getRange(rowNumber, 11, 1, CONFIG.PERSONAL_FORECAST_MONTHS).setFormulas([formulas]);
+    SpreadsheetApp.flush();
+    return {row:rowNumber,range:"B" + rowNumber + ":G" + rowNumber,mode:entry.mode,installmentAmount:entry.installmentAmount};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getPersonalOcaSheet_(spreadsheet) {
+  const sheet = spreadsheet.getSheets().find(function(candidate) {
+    return candidate.getSheetId() === CONFIG.FINANCES_OCA_SHEET_GID;
+  });
+  if (!sheet) throw new Error("No se encontró la pestaña OCA de Finanzas.");
+  return sheet;
+}
+
+function personalMonthSheetName_(date) {
+  const names = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
+  const month = Number(Utilities.formatDate(date || new Date(), "America/Montevideo", "M"));
+  return names[month - 1];
 }
 
 function personalMonthStartText_(dateText, offset) {
   const parts = parseDateParts_(dateText);
   const date = new Date(Date.UTC(parts.year, parts.month - 1 + Number(offset || 0), 1));
   return date.getUTCFullYear() + "-" + String(date.getUTCMonth() + 1).padStart(2, "0") + "-01";
-}
-
-function personalMonthDifference_(fromText, toText) {
-  const from = parseDateParts_(fromText);
-  const to = parseDateParts_(toText);
-  return (to.year - from.year) * 12 + to.month - from.month;
 }
 
 function roundMoney_(value) {
@@ -439,7 +416,8 @@ function periodLabel_(period) {
 }
 
 function getAvailableBalances_() {
-  const summary = summarizeBalanceRows_(readFamilyMovementRows_());
+  const currentPeriod = Utilities.formatDate(new Date(), "America/Montevideo", "yyyy-MM");
+  const summary = summarizeBalanceRows_(readFamilyMovementRows_(), currentPeriod);
   summary.updatedAt = new Date().toISOString();
   return summary;
 }
@@ -515,17 +493,19 @@ function summarizeCategoryRows_(rows, requestedPeriod) {
   };
 }
 
-function summarizeBalanceRows_(rows) {
-  const preferredOrder = ["Efectivo", "MiDinero", "Prex", "Mercado Pago"];
+function summarizeBalanceRows_(rows, period) {
+  const preferredOrder = ["Efectivo", "MiDinero", "Prex", "Mercado Pago", "OCA Blue"];
   const amounts = {};
   preferredOrder.forEach(function(account) { amounts[account] = 0; });
   let movements = 0;
+  const cleanPeriod = /^20\d{2}-(0[1-9]|1[0-2])$/.test(String(period || "")) ? String(period) : "";
 
   rows.forEach(function(row) {
     const date = sheetDateText_(row[0]);
     const type = cleanText_(row[1], 16);
     const amount = Number(row[2]);
     if (!date || date < CONFIG.START_DATE || ["Ingreso", "Egreso"].indexOf(type) === -1 || !isFinite(amount) || amount <= 0) return;
+    if (cleanPeriod && date.slice(0, 7) !== cleanPeriod) return;
 
     const account = cleanText_(row[4], 80) || "Efectivo";
     if (!Object.prototype.hasOwnProperty.call(amounts, account)) amounts[account] = 0;
